@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.routes import router as api_router
+from app.api.websocket import router as ws_router
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -26,8 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API routes
+# Include routers
 app.include_router(api_router)
+app.include_router(ws_router)
 
 
 @app.on_event("startup")
@@ -35,6 +37,7 @@ async def startup_event():
     """Run on application startup."""
     print("🚀 CloudRun IDE Backend starting...")
     print(f"📝 API Documentation: http://{settings.HOST}:{settings.PORT}/docs")
+    print(f"🔌 WebSocket endpoint: ws://{settings.HOST}:{settings.PORT}/ws/execute")
     print(f"🔧 Debug mode: {settings.DEBUG}")
 
 
@@ -52,6 +55,7 @@ async def root():
         "version": "0.1.0",
         "status": "running",
         "docs": "/docs",
+        "websocket": "/ws/execute",
     }
 
 
