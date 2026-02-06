@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CodeEditor, LANGUAGE_CONFIGS } from './components/Editor'
 import Console from './components/Console'
+import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
   const [currentView, setCurrentView] = useState('welcome') // 'welcome' or 'editor'
@@ -70,27 +71,14 @@ function WelcomeScreen({ onLanguageSelect }) {
 
 function EditorView({ language, onBack }) {
   const [code, setCode] = useState(LANGUAGE_CONFIGS[language]?.template || '')
-  const [output, setOutput] = useState([])
-  const [isRunning, setIsRunning] = useState(false)
+  const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
 
   const handleRunCode = async () => {
-    setIsRunning(true)
-    setOutput([{ type: 'status', content: 'Running code...', timestamp: new Date().toISOString() }])
-
-    // TODO: Implement actual code execution via WebSocket
-    // For now, just a placeholder
-    setTimeout(() => {
-      setOutput([
-        { type: 'status', content: 'Running code...', timestamp: new Date().toISOString() },
-        { type: 'stdout', content: 'Hello, World!\n' },
-        { type: 'complete', content: 'Execution completed successfully', timestamp: new Date().toISOString() },
-      ])
-      setIsRunning(false)
-    }, 1000)
+    await executeCode(language, code)
   }
 
-  const handleClearConsole = () => {
-    setOutput([])
+  const handleStopExecution = () => {
+    stopExecution()
   }
 
   return (
@@ -106,17 +94,28 @@ function EditorView({ language, onBack }) {
           </button>
           <h2 className="text-lg font-semibold capitalize">{language}</h2>
         </div>
-        <button 
-          onClick={handleRunCode}
-          disabled={isRunning}
-          className={`px-4 py-2 rounded-md transition-colors ${
-            isRunning 
-              ? 'bg-gray-600 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-        >
-          {isRunning ? 'Running...' : 'Run Code'}
-        </button>
+        
+        <div className="flex items-center gap-2">
+          {isRunning && (
+            <button 
+              onClick={handleStopExecution}
+              className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition-colors"
+            >
+              Stop
+            </button>
+          )}
+          <button 
+            onClick={handleRunCode}
+            disabled={isRunning}
+            className={`px-4 py-2 rounded-md transition-colors ${
+              isRunning 
+                ? 'bg-gray-600 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isRunning ? 'Running...' : 'Run Code'}
+          </button>
+        </div>
       </div>
 
       {/* Editor and Console */}
@@ -135,7 +134,7 @@ function EditorView({ language, onBack }) {
           <Console 
             output={output}
             isRunning={isRunning}
-            onClear={handleClearConsole}
+            onClear={clearOutput}
           />
         </div>
       </div>
