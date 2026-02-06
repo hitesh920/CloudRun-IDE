@@ -1,107 +1,83 @@
-# CloudRun IDE - Frontend
+# CloudRun IDE
 
-React + Vite frontend application for CloudRun IDE.
+**A Secure Multi-Language Cloud-Based Code Execution Sandbox with AI Assistance**
 
-## 🏗️ Structure
+## 🎯 Overview
+
+CloudRun IDE is a web-based integrated development environment that allows users to write, upload, and execute source code in multiple programming languages directly from a browser. The system provides secure, containerized cloud execution with real-time output streaming and AI-powered debugging support.
+
+## ✨ Features
+
+- 🚀 Multi-language support (Python, Java, C++, Node.js, HTML/CSS/JS)
+- 🔒 Secure Docker container isolation
+- ⚡ Real-time output streaming via WebSockets
+- 🤖 AI-powered code assistance (Google Gemini)
+- 📦 Automatic dependency detection and installation
+- 📁 Multi-file upload support
+- ⌨️ Interactive input handling
+- 🎨 Light/Dark theme
+- 🔧 Advanced Ubuntu execution mode
+
+## 🏗️ Architecture
+
+### Frontend
+- **React + Vite** - Fast, modern UI framework
+- **Monaco Editor** - VS Code-like editing experience
+- **Tailwind CSS** - Utility-first styling
+- **WebSockets** - Real-time communication
+
+### Backend
+- **Python + FastAPI** - High-performance async API
+- **Docker SDK** - Container orchestration
+- **WebSockets** - Real-time output streaming
+- **Google Gemini API** - AI assistance
+
+## 📁 Project Structure
 
 ```
-frontend/
-├── public/
-│   └── index.html
-│
-├── src/
-│   ├── App.jsx              # Main application component
-│   ├── main.jsx             # React entry point
-│   ├── index.css            # Global styles
-│   │
-│   ├── components/          # React components
-│   │   ├── WelcomeScreen.jsx
-│   │   ├── Editor.jsx
-│   │   ├── Console.jsx
-│   │   ├── Toolbar.jsx
-│   │   ├── FileExplorer.jsx
-│   │   ├── InputPanel.jsx
-│   │   ├── AIAssistant.jsx
-│   │   ├── DependencyPrompt.jsx
-│   │   ├── StatusBar.jsx
-│   │   ├── ThemeToggle.jsx
-│   │   └── AdvancedModeToggle.jsx
-│   │
-│   ├── services/            # API clients
-│   │   ├── api.js
-│   │   └── websocket.js
-│   │
-│   ├── hooks/               # Custom React hooks
-│   │   ├── useWebSocket.js
-│   │   ├── useEditor.js
-│   │   └── useTheme.js
-│   │
-│   ├── utils/               # Utilities
-│   │   ├── constants.js
-│   │   ├── templates.js
-│   │   └── helpers.js
-│   │
-│   └── styles/
-│       └── tailwind.config.js
-│
-├── package.json
-└── vite.config.js
+cloudrun-ide/
+├── backend/           # FastAPI backend server
+├── frontend/          # React frontend application
+├── deployment/        # Deployment configurations
+└── docs/              # Documentation
 ```
 
-## 🚀 Setup
+## 🚀 Quick Start
 
-### 1. Install Dependencies
+Coming soon...
 
-```bash
-cd frontend
-npm install
-```
+## 🛠️ Technology Stack
 
-### 2. Configure Environment
+**Frontend:**
+- React 18
+- Vite 5
+- Monaco Editor
+- Tailwind CSS
 
-```bash
-cp .env.example .env
-# Edit .env and set VITE_API_URL
-```
+**Backend:**
+- Python 3.11
+- FastAPI
+- Docker SDK
+- Google Generative AI
 
-### 3. Run Development Server
+**Infrastructure:**
+- Docker containers
+- ARM64 compatible (Oracle Cloud)
 
-```bash
-npm run dev
-```
+## 🔒 Security
 
-The app will be available at `http://localhost:5173`
+- Isolated Docker containers per execution
+- Resource limits (CPU, memory, timeout)
+- Network isolation
+- Rate limiting
 
-## 🔧 Configuration
+## 📄 License
 
-Environment variables in `.env`:
-- `VITE_API_URL` - Backend API URL (default: http://localhost:8000)
-- `VITE_WS_URL` - WebSocket URL (default: ws://localhost:8000)
+MIT License
 
-## 🏗️ Build for Production
+## 👨‍💻 Author
 
-```bash
-npm run build
-```
-
-Build output will be in `dist/` directory.
-
-## 📦 Key Dependencies
-
-- **React 18** - UI framework
-- **Vite 5** - Build tool
-- **@monaco-editor/react** - Code editor
-- **Tailwind CSS** - Styling
-- **Lucide React** - Icons
-
-## 🧪 Development
-
-```bash
-npm run dev      # Start dev server
-npm run build    # Build for production
-npm run preview  # Preview production build
-npm run lint     # Run linter
-```
+CloudRun IDE - 2025
 
 ---
 
