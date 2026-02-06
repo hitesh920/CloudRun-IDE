@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { CodeEditor, LANGUAGE_CONFIGS } from './components/Editor'
+import Console from './components/Console'
 
 function App() {
   const [currentView, setCurrentView] = useState('welcome') // 'welcome' or 'editor'
@@ -28,7 +30,6 @@ function App() {
   )
 }
 
-// Temporary placeholder components
 function WelcomeScreen({ onLanguageSelect }) {
   const languages = [
     { id: 'python', name: 'Python', icon: '🐍' },
@@ -68,6 +69,30 @@ function WelcomeScreen({ onLanguageSelect }) {
 }
 
 function EditorView({ language, onBack }) {
+  const [code, setCode] = useState(LANGUAGE_CONFIGS[language]?.template || '')
+  const [output, setOutput] = useState([])
+  const [isRunning, setIsRunning] = useState(false)
+
+  const handleRunCode = async () => {
+    setIsRunning(true)
+    setOutput([{ type: 'status', content: 'Running code...', timestamp: new Date().toISOString() }])
+
+    // TODO: Implement actual code execution via WebSocket
+    // For now, just a placeholder
+    setTimeout(() => {
+      setOutput([
+        { type: 'status', content: 'Running code...', timestamp: new Date().toISOString() },
+        { type: 'stdout', content: 'Hello, World!\n' },
+        { type: 'complete', content: 'Execution completed successfully', timestamp: new Date().toISOString() },
+      ])
+      setIsRunning(false)
+    }, 1000)
+  }
+
+  const handleClearConsole = () => {
+    setOutput([])
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Header */}
@@ -81,25 +106,37 @@ function EditorView({ language, onBack }) {
           </button>
           <h2 className="text-lg font-semibold capitalize">{language}</h2>
         </div>
-        <button className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition-colors">
-          Run Code
+        <button 
+          onClick={handleRunCode}
+          disabled={isRunning}
+          className={`px-4 py-2 rounded-md transition-colors ${
+            isRunning 
+              ? 'bg-gray-600 cursor-not-allowed' 
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+        >
+          {isRunning ? 'Running...' : 'Run Code'}
         </button>
       </div>
 
-      {/* Editor Area - Placeholder */}
-      <div className="flex-1 flex">
-        <div className="flex-1 bg-gray-900 p-4">
-          <div className="h-full bg-gray-800 rounded-lg flex items-center justify-center border border-gray-700">
-            <p className="text-gray-500">Editor will be here (Monaco Editor)</p>
-          </div>
+      {/* Editor and Console */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Editor */}
+        <div className="flex-1 p-4">
+          <CodeEditor
+            language={language}
+            code={code}
+            onChange={setCode}
+          />
         </div>
         
-        {/* Console - Placeholder */}
-        <div className="w-1/3 bg-gray-900 border-l border-gray-700 p-4">
-          <div className="h-full bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-400 mb-2">Console Output</h3>
-            <div className="text-gray-500 text-sm">Output will appear here...</div>
-          </div>
+        {/* Console */}
+        <div className="w-1/3 p-4 border-l border-gray-700">
+          <Console 
+            output={output}
+            isRunning={isRunning}
+            onClear={handleClearConsole}
+          />
         </div>
       </div>
     </div>
