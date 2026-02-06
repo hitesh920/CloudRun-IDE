@@ -6,6 +6,7 @@ Main entry point for the backend server.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.api.routes import router as api_router
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -24,6 +25,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include API routes
+app.include_router(api_router)
 
 
 @app.on_event("startup")
