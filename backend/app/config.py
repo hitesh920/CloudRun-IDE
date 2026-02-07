@@ -4,7 +4,8 @@ Application settings loaded from environment variables.
 """
 
 from pydantic_settings import BaseSettings
-from typing import List
+from pydantic import field_validator
+from typing import List, Union
 
 
 class Settings(BaseSettings):
@@ -16,10 +17,17 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # CORS Configuration
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ]
+    CORS_ORIGINS: Union[str, List[str]] = "*"
+    
+    @field_validator('CORS_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            if v == "*":
+                return ["*"]
+            # Split by comma if string
+            return [origin.strip() for origin in v.split(',')]
+        return v
     
     # Google Gemini API
     GEMINI_API_KEY: str = ""
