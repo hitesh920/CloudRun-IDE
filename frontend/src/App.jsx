@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CodeEditor, LANGUAGE_CONFIGS } from './components/Editor'
 import Console from './components/Console'
 import InputPanel from './components/InputPanel'
 import FileExplorer from './components/FileExplorer'
+import DependencyPrompt from './components/DependencyPrompt'
 import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
@@ -76,26 +77,33 @@ function EditorView({ language, onBack }) {
   const [stdin, setStdin] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
+  const [missingDependency, setMissingDependency] = useState(null)
+  
   const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
+
+  // Listen for dependency messages
+  useEffect(() => {
+    const lastMessage = output[output.length - 1]
+    if (lastMessage && lastMessage.type === 'dependency') {
+      setMissingDependency({
+        packageName: lastMessage.package_name,
+        packageManager: lastMessage.package_manager,
+        installCommand: lastMessage.install_command,
+      })
+    }
+  }, [output])
 
   const handleFileUpload = async (files) => {
     const newFiles = []
     
     for (const file of files) {
-      // Check file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
         alert(`File ${file.name} is too large (max 10MB)`)
         continue
       }
       
-      // Read file content
       const content = await readFileContent(file)
-      
-      newFiles.push({
-        name: file.name,
-        content: content,
-        size: file.size,
-      })
+      newFiles.push({ name: file.name, content: content, size: file.size })
     }
     
     setUploadedFiles(prev => [...prev, ...newFiles])
@@ -124,7 +132,8 @@ function EditorView({ language, onBack }) {
   }
 
   const handleRunCode = async () => {
-    // Prepare files array for execution
+    setMissingDependency(null)
+    
     const filesToSend = uploadedFiles.filter(f => f.name !== selectedFile).map(f => ({
       name: f.name,
       content: f.content,
@@ -137,53 +146,44 @@ function EditorView({ language, onBack }) {
     stopExecution()
   }
 
+  const handleInstallDependency = async () => {
+    alert('Dependency installation coming in next commit!')
+    setMissingDependency(null)
+  }
+
+  const handleDismissDependency = () => {
+    setMissingDependency(null)
+  }
+
   return (
     <div className="flex-1 flex flex-col">
-      {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
+          <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
             ← Back
           </button>
           <h2 className="text-lg font-semibold capitalize">{language}</h2>
-          {selectedFile && (
-            <span className="text-sm text-gray-400">
-              Editing: {selectedFile}
-            </span>
-          )}
+          {selectedFile && <span className="text-sm text-gray-400">Editing: {selectedFile}</span>}
         </div>
         
         <div className="flex items-center gap-2">
           {isRunning && (
-            <button 
-              onClick={handleStopExecution}
-              className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition-colors"
-            >
+            <button onClick={handleStopExecution} className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition-colors">
               Stop
             </button>
           )}
           <button 
             onClick={handleRunCode}
             disabled={isRunning}
-            className={`px-4 py-2 rounded-md transition-colors ${
-              isRunning 
-                ? 'bg-gray-600 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+            className={`px-4 py-2 rounded-md transition-colors ${isRunning ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
             {isRunning ? 'Running...' : 'Run Code'}
           </button>
         </div>
       </div>
 
-      {/* Editor and Console */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Side - Editor */}
         <div className="flex-1 p-4 flex flex-col gap-4">
-          {/* File Explorer */}
           <FileExplorer
             files={uploadedFiles}
             selectedFile={selectedFile}
@@ -192,31 +192,27 @@ function EditorView({ language, onBack }) {
             onFileUpload={handleFileUpload}
           />
           
-          {/* Input Panel */}
-          <InputPanel 
-            onInputChange={setStdin}
-            disabled={isRunning}
-          />
+          <InputPanel onInputChange={setStdin} disabled={isRunning} />
           
-          {/* Code Editor */}
           <div className="flex-1">
-            <CodeEditor
-              language={language}
-              code={code}
-              onChange={setCode}
-            />
+            <CodeEditor language={language} code={code} onChange={setCode} />
           </div>
         </div>
         
-        {/* Right Side - Console */}
         <div className="w-1/3 p-4 border-l border-gray-700">
-          <Console 
-            output={output}
-            isRunning={isRunning}
-            onClear={clearOutput}
-          />
+          <Console output={output} isRunning={isRunning} onClear={clearOutput} />
         </div>
       </div>
+
+      {missingDependency && (
+        <DependencyPrompt
+          packageName={missingDependency.packageName}
+          packageManager={missingDependency.packageManager}
+          installCommand={missingDependency.installCommand}
+          onInstall={handleInstallDependency}
+          onDismiss={handleDismissDependency}
+        />
+      )}
     </div>
   )
 }

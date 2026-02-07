@@ -1,6 +1,6 @@
 """
 CloudRun IDE - Code Executor
-Handles code execution in Docker containers with multi-file support.
+Handles code execution in Docker containers with multi-file support and dependency detection.
 """
 
 import os
@@ -9,7 +9,8 @@ from typing import Optional, Dict, Any, AsyncGenerator, List
 import asyncio
 
 from app.core.docker_manager import docker_manager
-from app.utils.constants import EXECUTION_COMMANDS, FILE_EXTENSIONS, CODE_TEMPLATES
+from app.services.dependency_detector import dependency_detector
+from app.utils.constants import EXECUTION_COMMANDS, FILE_EXTENSIONS, CODE_TEMPLATES, DOCKER_IMAGES
 from app.utils.helpers import (
     generate_execution_id,
     extract_java_classname,
@@ -127,8 +128,12 @@ class CodeExecutor:
                     "timestamp": get_timestamp(),
                 }
                 
+                # Collect output for dependency detection
+                output_lines = []
+                
                 # Stream output
                 for line in docker_manager.get_logs_stream(container):
+                    output_lines.append(line)
                     yield {
                         "type": "stdout",
                         "content": line,
@@ -138,17 +143,44 @@ class CodeExecutor:
                 # Wait for completion
                 result = docker_manager.wait_container(container, timeout=1)
                 
-                # Send completion status
+                # Get exit code
                 exit_code = result.get("StatusCode", 0)
+                
+                # Check for missing dependencies if execution failed
+                if exit_code != 0:
+                    full_output = ''.join(output_lines)
+                    missing_dep = dependency_detector.detect_missing_dependency(
+                        full_output, 
+                        language
+                    )
+                    
+                    if missing_dep:
+                        package_manager, package_name = missing_dep
+                        install_cmd = dependency_detector.get_install_command(
+                            language,
+                            package_manager,
+                            package_name
+                        )
+                        
+                        yield {
+                            "type": "dependency",
+                            "content": f"Missing dependency detected: {package_name}",
+                            "package_manager": package_manager,
+                            "package_name": package_name,
+                            "install_command": install_cmd,
+                            "timestamp": get_timestamp(),
+                        }
+                
+                # Send completion status
                 if exit_code == 0:
                     yield {
-                        "type": "status",
+                        "type": "complete",
                         "content": "Execution completed successfully",
                         "timestamp": get_timestamp(),
                     }
                 else:
                     yield {
-                        "type": "status",
+                        "type": "complete",
                         "content": f"Execution failed with exit code {exit_code}",
                         "timestamp": get_timestamp(),
                     }
@@ -169,16 +201,79 @@ class CodeExecutor:
                     docker_manager.cleanup_container(container)
                     del self.active_executions[execution_id]
     
-    def stop_execution(self, execution_id: str) -> bool:
+    async def install_dependency(
+        self,
+        language: str,
+        package_manager: str,
+        package_name: str,
+    ) -> Dict[str, Any]:
         """
-        Stop a running execution.
+        Install a dependency in a container.
         
         Args:
-            execution_id: Execution identifier
+            language: Programming language
+            package_manager: Package manager (pip, npm)
+            package_name: Package to install
             
         Returns:
-            True if stopped successfully
+            Installation result
         """
+        execution_id = generate_execution_id()
+        
+        try:
+            # Get install command
+            install_cmd = dependency_detector.get_install_command(
+                language,
+                package_manager,
+                package_name
+            )
+            
+            if not install_cmd:
+                return {
+                    "success": False,
+                    "message": f"Unsupported package manager: {package_manager}",
+                }
+            
+            # Pull image first
+            docker_manager.pull_image(language)
+            image_name = DOCKER_IMAGES.get(language, "python:3.11-slim")
+            
+            # Create container with network enabled for installation
+            container = docker_manager.client.containers.create(
+                image=image_name,
+                command=["sh", "-c", install_cmd],
+                name=f"cloudrun_install_{execution_id}",
+                detach=True,
+                network_disabled=False,  # Enable network for installation
+                mem_limit="512m",
+            )
+            
+            # Start and wait
+            container.start()
+            result = container.wait(timeout=60)
+            
+            # Get logs
+            logs = container.logs().decode('utf-8', errors='replace')
+            
+            # Cleanup
+            container.remove(force=True)
+            
+            success = result.get("StatusCode", 1) == 0
+            
+            return {
+                "success": success,
+                "message": logs if success else "Installation failed",
+                "package": package_name,
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Installation error: {str(e)}",
+            }
+    
+    def stop_execution(self, execution_id: str) -> bool:
+        """Stop a running execution."""
         if execution_id not in self.active_executions:
             return False
         
@@ -188,20 +283,9 @@ class CodeExecutor:
         return True
     
     def _prepare_code_file(self, temp_dir: str, language: str, code: str) -> str:
-        """
-        Write code to a temporary file.
-        
-        Args:
-            temp_dir: Temporary directory path
-            language: Programming language
-            code: Source code
-            
-        Returns:
-            Path to the code file
-        """
+        """Write code to a temporary file."""
         extension = FILE_EXTENSIONS.get(language, ".txt")
         
-        # Special handling for Java (needs specific filename)
         if language == "java":
             classname = extract_java_classname(code)
             filename = f"{classname}.java"
@@ -216,15 +300,7 @@ class CodeExecutor:
         return file_path
     
     def _prepare_additional_file(self, temp_dir: str, filename: str, content: str):
-        """
-        Write an additional file to temporary directory.
-        
-        Args:
-            temp_dir: Temporary directory path
-            filename: File name
-            content: File content
-        """
-        # Sanitize filename for security
+        """Write an additional file to temporary directory."""
         safe_filename = sanitize_filename(filename)
         file_path = os.path.join(temp_dir, safe_filename)
         
@@ -232,16 +308,7 @@ class CodeExecutor:
             f.write(content)
     
     def _prepare_stdin_file(self, temp_dir: str, stdin: str) -> str:
-        """
-        Write stdin to a file.
-        
-        Args:
-            temp_dir: Temporary directory path
-            stdin: Input content
-            
-        Returns:
-            Path to stdin file
-        """
+        """Write stdin to a file."""
         stdin_path = os.path.join(temp_dir, "input.txt")
         
         with open(stdin_path, 'w', encoding='utf-8') as f:
@@ -249,25 +316,13 @@ class CodeExecutor:
         
         return stdin_path
     
-    async def _copy_files_to_container(
-        self, 
-        container: Any, 
-        temp_dir: str
-    ):
-        """
-        Copy all files from temp directory to container.
-        
-        Args:
-            container: Docker container
-            temp_dir: Temporary directory with files
-        """
+    async def _copy_files_to_container(self, container: Any, temp_dir: str):
+        """Copy all files from temp directory to container."""
         import tarfile
         import io
         
-        # Create tar archive with all files
         tar_stream = io.BytesIO()
         with tarfile.open(fileobj=tar_stream, mode='w') as tar:
-            # Add all files from temp_dir
             for filename in os.listdir(temp_dir):
                 file_path = os.path.join(temp_dir, filename)
                 tar.add(file_path, arcname=filename)
@@ -276,24 +331,13 @@ class CodeExecutor:
         container.put_archive('/workspace', tar_stream)
     
     def _prepare_command(self, language: str, file_path: str, code: str) -> list:
-        """
-        Prepare execution command for the language.
-        
-        Args:
-            language: Programming language
-            file_path: Path to code file
-            code: Source code (for inline execution)
-            
-        Returns:
-            Command list for Docker
-        """
+        """Prepare execution command for the language."""
         if language not in EXECUTION_COMMANDS:
             return ["echo", "Unsupported language"]
         
         command_template = EXECUTION_COMMANDS[language]
         filename = os.path.basename(file_path)
         
-        # Replace placeholders
         command = []
         for part in command_template:
             part = part.replace("{file}", f"/workspace/{filename}")
@@ -310,15 +354,7 @@ class CodeExecutor:
         return command
     
     def get_code_template(self, language: str) -> str:
-        """
-        Get starter code template for a language.
-        
-        Args:
-            language: Programming language
-            
-        Returns:
-            Code template string
-        """
+        """Get starter code template for a language."""
         return CODE_TEMPLATES.get(language, "")
 
 
