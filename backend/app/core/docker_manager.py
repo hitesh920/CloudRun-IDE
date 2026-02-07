@@ -19,12 +19,20 @@ class DockerManager:
     def __init__(self):
         """Initialize Docker client."""
         try:
-            self.client = docker.from_env()
+            # Try to connect using unix socket directly
+            self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
             self.client.ping()
             print("✅ Docker client connected successfully")
         except DockerException as e:
             print(f"❌ Docker connection failed: {e}")
-            raise
+            # Fallback to from_env()
+            try:
+                self.client = docker.from_env()
+                self.client.ping()
+                print("✅ Docker client connected via from_env()")
+            except Exception as e2:
+                print(f"❌ All Docker connection methods failed: {e2}")
+                raise
     
     def pull_image(self, language: str) -> bool:
         """
