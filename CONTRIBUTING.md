@@ -1,72 +1,43 @@
 # Contributing to CloudRun IDE
 
-Thank you for your interest in contributing to CloudRun IDE!
+Thank you for your interest in contributing! 🎉
 
-## 🚀 Getting Started
+## Commit Guidelines
 
-1. Fork the repository
-2. Clone your fork
-3. Create a new branch for your feature
-4. Make your changes
-5. Test your changes
-6. Submit a pull request
-
-## 📝 Commit Guidelines
-
-We follow atomic commits with clear messages:
-
-### Format
+Follow Conventional Commits:
 ```
-<type>: <description>
-
-[optional body]
+feat: add new feature
+fix: fix bug
+docs: update documentation
+style: format code
+refactor: refactor code
+test: add tests
+chore: maintenance
 ```
 
-### Types
-- `feat:` - New feature
-- `fix:` - Bug fix
-- `docs:` - Documentation changes
-- `style:` - Code style changes (formatting)
-- `refactor:` - Code refactoring
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
+## Development
 
-### Examples
 ```bash
-feat: add Python code execution support
-fix: resolve WebSocket connection timeout
-docs: update installation instructions
+# Backend
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-## 🧪 Testing
+## Pull Requests
 
-Before submitting:
-- Test backend: `cd backend && pytest`
-- Test frontend: `cd frontend && npm run lint`
-- Manual testing of your feature
-
-## 📋 Code Style
-
-**Backend (Python):**
-- Follow PEP 8
-- Use meaningful variable names
-- Add docstrings to functions
-- Keep functions focused and small
-
-**Frontend (JavaScript/React):**
-- Use functional components
-- Follow React hooks best practices
-- Use meaningful component names
-- Keep components focused
-
-## 🔒 Security
-
-If you discover a security vulnerability, please email us directly instead of creating a public issue.
-
-## 💬 Questions?
-
-Open an issue for discussion before starting major changes.
+1. Fork and create feature branch
+2. Make your changes
+3. Test thoroughly
+4. Submit PR with clear description
 
 ---
 
-Thank you for contributing! 🎉
+**Happy Contributing! 🚀**
