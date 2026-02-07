@@ -5,11 +5,16 @@ import InputPanel from './components/InputPanel'
 import FileExplorer from './components/FileExplorer'
 import DependencyPrompt from './components/DependencyPrompt'
 import AIAssistant from './components/AIAssistant'
+import ThemeToggle from './components/ThemeToggle'
+import StatusBar from './components/StatusBar'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useTheme } from './hooks/useTheme'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function App() {
   const [currentView, setCurrentView] = useState('welcome')
   const [selectedLanguage, setSelectedLanguage] = useState(null)
+  const { theme, toggleTheme } = useTheme()
 
   const handleLanguageSelect = (language) => {
     setSelectedLanguage(language)
@@ -22,20 +27,22 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-screen bg-gray-900 text-white flex flex-col">
+    <div className={`h-screen w-screen flex flex-col ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       {currentView === 'welcome' ? (
-        <WelcomeScreen onLanguageSelect={handleLanguageSelect} />
+        <WelcomeScreen onLanguageSelect={handleLanguageSelect} theme={theme} />
       ) : (
         <EditorView 
           language={selectedLanguage} 
           onBack={handleBackToWelcome}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
       )}
     </div>
   )
 }
 
-function WelcomeScreen({ onLanguageSelect }) {
+function WelcomeScreen({ onLanguageSelect, theme }) {
   const languages = [
     { id: 'python', name: 'Python', icon: '🐍' },
     { id: 'nodejs', name: 'Node.js', icon: '🟢' },
@@ -45,12 +52,12 @@ function WelcomeScreen({ onLanguageSelect }) {
   ]
 
   return (
-    <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className={`flex-1 flex items-center justify-center ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-blue-50 via-white to-purple-50'}`}>
       <div className="text-center">
         <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
           CloudRun IDE
         </h1>
-        <p className="text-xl text-gray-400 mb-12">
+        <p className={`text-xl mb-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
           Choose a programming language to start coding
         </p>
         
@@ -59,9 +66,11 @@ function WelcomeScreen({ onLanguageSelect }) {
             <button
               key={lang.id}
               onClick={() => onLanguageSelect(lang.id)}
-              className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-500 
-                         rounded-lg p-8 transition-all duration-200 transform hover:scale-105
-                         hover:shadow-lg hover:shadow-blue-500/20"
+              className={`rounded-lg p-8 transition-all duration-200 transform hover:scale-105 ${
+                theme === 'dark'
+                  ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20'
+                  : 'bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-400/20'
+              }`}
             >
               <div className="text-5xl mb-3">{lang.icon}</div>
               <div className="text-lg font-semibold">{lang.name}</div>
@@ -73,17 +82,31 @@ function WelcomeScreen({ onLanguageSelect }) {
   )
 }
 
-function EditorView({ language, onBack }) {
+function EditorView({ language, onBack, theme, onToggleTheme }) {
   const [code, setCode] = useState(LANGUAGE_CONFIGS[language]?.template || '')
   const [stdin, setStdin] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
   const [missingDependency, setMissingDependency] = useState(null)
   const [lastError, setLastError] = useState(null)
+  const [executionTime, setExecutionTime] = useState(null)
   
   const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
 
-  // Track last error for AI
+  const linesOfCode = code.split('\n').length
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onRun: handleRunCode,
+    onStop: stopExecution,
+    onClear: clearOutput,
+    onSave: () => {
+      localStorage.setItem(`code-${language}`, code)
+      alert('Code saved!')
+    },
+    isRunning,
+  })
+
   useEffect(() => {
     const lastMessage = output[output.length - 1]
     
@@ -137,9 +160,10 @@ function EditorView({ language, onBack }) {
     }
   }
 
-  const handleRunCode = async () => {
+  async function handleRunCode() {
     setMissingDependency(null)
     setLastError(null)
+    const startTime = Date.now()
     
     const filesToSend = uploadedFiles.filter(f => f.name !== selectedFile).map(f => ({
       name: f.name,
@@ -147,6 +171,9 @@ function EditorView({ language, onBack }) {
     }))
     
     await executeCode(language, code, stdin, filesToSend)
+    
+    const endTime = Date.now()
+    setExecutionTime(endTime - startTime)
   }
 
   const handleStopExecution = () => {
@@ -164,25 +191,31 @@ function EditorView({ language, onBack }) {
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${
+        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+      }`}>
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors">
+          <button 
+            onClick={onBack} 
+            className={`transition-colors ${theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+          >
             ← Back
           </button>
           <h2 className="text-lg font-semibold capitalize">{language}</h2>
-          {selectedFile && <span className="text-sm text-gray-400">Editing: {selectedFile}</span>}
+          {selectedFile && <span className={theme === 'dark' ? 'text-sm text-gray-400' : 'text-sm text-gray-600'}>Editing: {selectedFile}</span>}
         </div>
         
         <div className="flex items-center gap-2">
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
           {isRunning && (
-            <button onClick={handleStopExecution} className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition-colors">
+            <button onClick={handleStopExecution} className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 transition-colors text-white">
               Stop
             </button>
           )}
           <button 
             onClick={handleRunCode}
             disabled={isRunning}
-            className={`px-4 py-2 rounded-md transition-colors ${isRunning ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`px-4 py-2 rounded-md transition-colors text-white ${isRunning ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
             {isRunning ? 'Running...' : 'Run Code'}
           </button>
@@ -204,14 +237,21 @@ function EditorView({ language, onBack }) {
           <AIAssistant code={code} error={lastError} language={language} />
           
           <div className="flex-1">
-            <CodeEditor language={language} code={code} onChange={setCode} />
+            <CodeEditor language={language} code={code} onChange={setCode} theme={theme === 'dark' ? 'vs-dark' : 'vs-light'} />
           </div>
         </div>
         
-        <div className="w-1/3 p-4 border-l border-gray-700">
+        <div className={`w-1/3 p-4 border-l ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
           <Console output={output} isRunning={isRunning} onClear={clearOutput} />
         </div>
       </div>
+
+      <StatusBar 
+        language={language}
+        isRunning={isRunning}
+        executionTime={executionTime}
+        linesOfCode={linesOfCode}
+      />
 
       {missingDependency && (
         <DependencyPrompt
