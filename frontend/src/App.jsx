@@ -4,6 +4,7 @@ import Console from './components/Console'
 import InputPanel from './components/InputPanel'
 import FileExplorer from './components/FileExplorer'
 import DependencyPrompt from './components/DependencyPrompt'
+import AIAssistant from './components/AIAssistant'
 import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
@@ -78,34 +79,39 @@ function EditorView({ language, onBack }) {
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
   const [missingDependency, setMissingDependency] = useState(null)
+  const [lastError, setLastError] = useState(null)
   
   const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
 
-  // Listen for dependency messages
+  // Track last error for AI
   useEffect(() => {
     const lastMessage = output[output.length - 1]
-    if (lastMessage && lastMessage.type === 'dependency') {
-      setMissingDependency({
-        packageName: lastMessage.package_name,
-        packageManager: lastMessage.package_manager,
-        installCommand: lastMessage.install_command,
-      })
+    
+    if (lastMessage) {
+      if (lastMessage.type === 'dependency') {
+        setMissingDependency({
+          packageName: lastMessage.package_name,
+          packageManager: lastMessage.package_manager,
+          installCommand: lastMessage.install_command,
+        })
+      }
+      
+      if (lastMessage.type === 'stderr' || lastMessage.type === 'error') {
+        setLastError(lastMessage.content)
+      }
     }
   }, [output])
 
   const handleFileUpload = async (files) => {
     const newFiles = []
-    
     for (const file of files) {
       if (file.size > 10 * 1024 * 1024) {
         alert(`File ${file.name} is too large (max 10MB)`)
         continue
       }
-      
       const content = await readFileContent(file)
       newFiles.push({ name: file.name, content: content, size: file.size })
     }
-    
     setUploadedFiles(prev => [...prev, ...newFiles])
   }
 
@@ -133,6 +139,7 @@ function EditorView({ language, onBack }) {
 
   const handleRunCode = async () => {
     setMissingDependency(null)
+    setLastError(null)
     
     const filesToSend = uploadedFiles.filter(f => f.name !== selectedFile).map(f => ({
       name: f.name,
@@ -147,7 +154,7 @@ function EditorView({ language, onBack }) {
   }
 
   const handleInstallDependency = async () => {
-    alert('Dependency installation coming in next commit!')
+    alert('Dependency installation coming soon!')
     setMissingDependency(null)
   }
 
@@ -193,6 +200,8 @@ function EditorView({ language, onBack }) {
           />
           
           <InputPanel onInputChange={setStdin} disabled={isRunning} />
+          
+          <AIAssistant code={code} error={lastError} language={language} />
           
           <div className="flex-1">
             <CodeEditor language={language} code={code} onChange={setCode} />
