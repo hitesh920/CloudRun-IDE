@@ -14,7 +14,7 @@ class WebSocketService {
   /**
    * Connect to WebSocket server and execute code
    */
-  connect(language, code, stdin = '') {
+  connect(language, code, stdin = '', files = []) {
     return new Promise((resolve, reject) => {
       try {
         // Close existing connection if any
@@ -27,11 +27,12 @@ class WebSocketService {
           console.log('✅ WebSocket connected')
           this.isConnected = true
 
-          // Send execution request
+          // Send execution request with files
           this.ws.send(JSON.stringify({
             language,
             code,
             stdin,
+            files,  // Array of {name, content}
           }))
 
           resolve()

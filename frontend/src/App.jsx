@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { CodeEditor, LANGUAGE_CONFIGS } from './components/Editor'
 import Console from './components/Console'
 import InputPanel from './components/InputPanel'
+import FileExplorer from './components/FileExplorer'
 import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
-  const [currentView, setCurrentView] = useState('welcome') // 'welcome' or 'editor'
+  const [currentView, setCurrentView] = useState('welcome')
   const [selectedLanguage, setSelectedLanguage] = useState(null)
 
   const handleLanguageSelect = (language) => {
@@ -73,10 +74,63 @@ function WelcomeScreen({ onLanguageSelect }) {
 function EditorView({ language, onBack }) {
   const [code, setCode] = useState(LANGUAGE_CONFIGS[language]?.template || '')
   const [stdin, setStdin] = useState('')
+  const [uploadedFiles, setUploadedFiles] = useState([])
+  const [selectedFile, setSelectedFile] = useState(null)
   const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
 
+  const handleFileUpload = async (files) => {
+    const newFiles = []
+    
+    for (const file of files) {
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`File ${file.name} is too large (max 10MB)`)
+        continue
+      }
+      
+      // Read file content
+      const content = await readFileContent(file)
+      
+      newFiles.push({
+        name: file.name,
+        content: content,
+        size: file.size,
+      })
+    }
+    
+    setUploadedFiles(prev => [...prev, ...newFiles])
+  }
+
+  const readFileContent = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = reject
+      reader.readAsText(file)
+    })
+  }
+
+  const handleFileSelect = (file) => {
+    setSelectedFile(file.name)
+    setCode(file.content)
+  }
+
+  const handleFileDelete = (fileToDelete) => {
+    setUploadedFiles(prev => prev.filter(f => f.name !== fileToDelete.name))
+    if (selectedFile === fileToDelete.name) {
+      setSelectedFile(null)
+      setCode(LANGUAGE_CONFIGS[language]?.template || '')
+    }
+  }
+
   const handleRunCode = async () => {
-    await executeCode(language, code, stdin)
+    // Prepare files array for execution
+    const filesToSend = uploadedFiles.filter(f => f.name !== selectedFile).map(f => ({
+      name: f.name,
+      content: f.content,
+    }))
+    
+    await executeCode(language, code, stdin, filesToSend)
   }
 
   const handleStopExecution = () => {
@@ -95,6 +149,11 @@ function EditorView({ language, onBack }) {
             ← Back
           </button>
           <h2 className="text-lg font-semibold capitalize">{language}</h2>
+          {selectedFile && (
+            <span className="text-sm text-gray-400">
+              Editing: {selectedFile}
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -122,8 +181,17 @@ function EditorView({ language, onBack }) {
 
       {/* Editor and Console */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Editor */}
+        {/* Left Side - Editor */}
         <div className="flex-1 p-4 flex flex-col gap-4">
+          {/* File Explorer */}
+          <FileExplorer
+            files={uploadedFiles}
+            selectedFile={selectedFile}
+            onFileSelect={handleFileSelect}
+            onFileDelete={handleFileDelete}
+            onFileUpload={handleFileUpload}
+          />
+          
           {/* Input Panel */}
           <InputPanel 
             onInputChange={setStdin}
@@ -140,7 +208,7 @@ function EditorView({ language, onBack }) {
           </div>
         </div>
         
-        {/* Console */}
+        {/* Right Side - Console */}
         <div className="w-1/3 p-4 border-l border-gray-700">
           <Console 
             output={output}

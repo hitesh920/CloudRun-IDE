@@ -1,11 +1,11 @@
 """
 CloudRun IDE - Code Executor
-Handles code execution in Docker containers.
+Handles code execution in Docker containers with multi-file support.
 """
 
 import os
 import tempfile
-from typing import Optional, Dict, Any, AsyncGenerator
+from typing import Optional, Dict, Any, AsyncGenerator, List
 import asyncio
 
 from app.core.docker_manager import docker_manager
@@ -15,6 +15,7 @@ from app.utils.helpers import (
     extract_java_classname,
     validate_code,
     get_timestamp,
+    sanitize_filename,
 )
 
 
@@ -25,140 +26,21 @@ class CodeExecutor:
         """Initialize the executor."""
         self.active_executions: Dict[str, Any] = {}
     
-    async def execute_code(
-        self,
-        language: str,
-        code: str,
-        stdin: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Execute code in a Docker container.
-        
-        Args:
-            language: Programming language
-            code: Source code to execute
-            stdin: Standard input for the program
-            
-        Returns:
-            Execution result dictionary
-        """
-        # Generate execution ID
-        execution_id = generate_execution_id()
-        
-        # Validate code
-        is_valid, error_msg = validate_code(code, language)
-        if not is_valid:
-            return {
-                "execution_id": execution_id,
-                "status": "error",
-                "stdout": "",
-                "stderr": error_msg,
-                "exit_code": 1,
-            }
-        
-        # Create temporary directory for code files
-        with tempfile.TemporaryDirectory() as temp_dir:
-            try:
-                # Prepare code file
-                file_path = self._prepare_code_file(temp_dir, language, code)
-                
-                # Prepare execution command
-                command = self._prepare_command(language, file_path, code)
-                
-                # Prepare stdin file if provided
-                stdin_file = None
-                if stdin:
-                    stdin_file = self._prepare_stdin_file(temp_dir, stdin)
-                
-                # Create container
-                container = docker_manager.create_container(
-                    execution_id=execution_id,
-                    language=language,
-                    command=command,
-                    working_dir="/workspace",
-                )
-                
-                if not container:
-                    return {
-                        "execution_id": execution_id,
-                        "status": "error",
-                        "stdout": "",
-                        "stderr": "Failed to create Docker container",
-                        "exit_code": 1,
-                    }
-                
-                # Store active execution
-                self.active_executions[execution_id] = container
-                
-                # Copy files to container
-                await self._copy_files_to_container(container, temp_dir, stdin_file)
-                
-                # Start container
-                if not docker_manager.start_container(container):
-                    docker_manager.remove_container(container)
-                    return {
-                        "execution_id": execution_id,
-                        "status": "error",
-                        "stdout": "",
-                        "stderr": "Failed to start container",
-                        "exit_code": 1,
-                    }
-                
-                # Wait for execution to complete
-                result = docker_manager.wait_container(container)
-                
-                # Get logs
-                stdout, stderr = docker_manager.get_logs(container)
-                
-                # Cleanup
-                docker_manager.cleanup_container(container)
-                del self.active_executions[execution_id]
-                
-                # Determine status
-                exit_code = result.get("StatusCode", -1)
-                if exit_code == -1:
-                    status = "timeout"
-                elif exit_code == 0:
-                    status = "completed"
-                else:
-                    status = "error"
-                
-                return {
-                    "execution_id": execution_id,
-                    "status": status,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "exit_code": exit_code,
-                }
-                
-            except Exception as e:
-                # Cleanup on error
-                if execution_id in self.active_executions:
-                    container = self.active_executions[execution_id]
-                    docker_manager.cleanup_container(container)
-                    del self.active_executions[execution_id]
-                
-                return {
-                    "execution_id": execution_id,
-                    "status": "error",
-                    "stdout": "",
-                    "stderr": f"Execution error: {str(e)}",
-                    "exit_code": 1,
-                }
-    
     async def execute_code_stream(
         self,
         language: str,
         code: str,
         stdin: Optional[str] = None,
+        files: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute code and stream output in real-time.
         
         Args:
             language: Programming language
-            code: Source code to execute
+            code: Source code to execute (main file)
             stdin: Standard input for the program
+            files: Additional files [{name: str, content: str}]
             
         Yields:
             Output messages as they become available
@@ -184,8 +66,17 @@ class CodeExecutor:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
-                # Prepare code file
+                # Prepare main code file
                 file_path = self._prepare_code_file(temp_dir, language, code)
+                
+                # Prepare additional files if provided
+                if files:
+                    for file_data in files:
+                        self._prepare_additional_file(
+                            temp_dir,
+                            file_data.get('name'),
+                            file_data.get('content', '')
+                        )
                 
                 # Prepare command
                 command = self._prepare_command(language, file_path, code)
@@ -216,8 +107,8 @@ class CodeExecutor:
                 
                 self.active_executions[execution_id] = container
                 
-                # Copy files to container
-                await self._copy_files_to_container(container, temp_dir, stdin_file)
+                # Copy all files to container
+                await self._copy_files_to_container(container, temp_dir)
                 
                 # Start container
                 if not docker_manager.start_container(container):
@@ -324,6 +215,22 @@ class CodeExecutor:
         
         return file_path
     
+    def _prepare_additional_file(self, temp_dir: str, filename: str, content: str):
+        """
+        Write an additional file to temporary directory.
+        
+        Args:
+            temp_dir: Temporary directory path
+            filename: File name
+            content: File content
+        """
+        # Sanitize filename for security
+        safe_filename = sanitize_filename(filename)
+        file_path = os.path.join(temp_dir, safe_filename)
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    
     def _prepare_stdin_file(self, temp_dir: str, stdin: str) -> str:
         """
         Write stdin to a file.
@@ -345,16 +252,14 @@ class CodeExecutor:
     async def _copy_files_to_container(
         self, 
         container: Any, 
-        temp_dir: str, 
-        stdin_file: Optional[str] = None
+        temp_dir: str
     ):
         """
-        Copy code and stdin files to container.
+        Copy all files from temp directory to container.
         
         Args:
             container: Docker container
             temp_dir: Temporary directory with files
-            stdin_file: Path to stdin file (optional)
         """
         import tarfile
         import io

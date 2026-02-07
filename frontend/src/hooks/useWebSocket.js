@@ -37,14 +37,14 @@ export function useWebSocket() {
   }, [handleMessage])
 
   // Execute code via WebSocket
-  const executeCode = useCallback(async (language, code, stdin = '') => {
+  const executeCode = useCallback(async (language, code, stdin = '', files = []) => {
     try {
       // Clear previous output
       setOutput([])
       setIsRunning(true)
 
       // Connect and execute
-      await websocketService.connect(language, code, stdin)
+      await websocketService.connect(language, code, stdin, files)
       setIsConnected(true)
     } catch (error) {
       setOutput([{
