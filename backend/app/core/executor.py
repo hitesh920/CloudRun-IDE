@@ -65,6 +65,11 @@ class CodeExecutor:
                 # Prepare execution command
                 command = self._prepare_command(language, file_path, code)
                 
+                # Prepare stdin file if provided
+                stdin_file = None
+                if stdin:
+                    stdin_file = self._prepare_stdin_file(temp_dir, stdin)
+                
                 # Create container
                 container = docker_manager.create_container(
                     execution_id=execution_id,
@@ -85,9 +90,8 @@ class CodeExecutor:
                 # Store active execution
                 self.active_executions[execution_id] = container
                 
-                # Copy code file to container
-                # Note: We'll write the file directly in the container for now
-                # For multi-file support, we'll use copy_to_container
+                # Copy files to container
+                await self._copy_files_to_container(container, temp_dir, stdin_file)
                 
                 # Start container
                 if not docker_manager.start_container(container):
@@ -186,6 +190,14 @@ class CodeExecutor:
                 # Prepare command
                 command = self._prepare_command(language, file_path, code)
                 
+                # Prepare stdin file if provided
+                stdin_file = None
+                if stdin:
+                    stdin_file = self._prepare_stdin_file(temp_dir, stdin)
+                    # Modify command to redirect stdin
+                    if language != "ubuntu":
+                        command = ["sh", "-c", f"{' '.join(command)} < /workspace/input.txt"]
+                
                 # Create container
                 container = docker_manager.create_container(
                     execution_id=execution_id,
@@ -203,6 +215,9 @@ class CodeExecutor:
                     return
                 
                 self.active_executions[execution_id] = container
+                
+                # Copy files to container
+                await self._copy_files_to_container(container, temp_dir, stdin_file)
                 
                 # Start container
                 if not docker_manager.start_container(container):
@@ -308,6 +323,52 @@ class CodeExecutor:
             f.write(code)
         
         return file_path
+    
+    def _prepare_stdin_file(self, temp_dir: str, stdin: str) -> str:
+        """
+        Write stdin to a file.
+        
+        Args:
+            temp_dir: Temporary directory path
+            stdin: Input content
+            
+        Returns:
+            Path to stdin file
+        """
+        stdin_path = os.path.join(temp_dir, "input.txt")
+        
+        with open(stdin_path, 'w', encoding='utf-8') as f:
+            f.write(stdin)
+        
+        return stdin_path
+    
+    async def _copy_files_to_container(
+        self, 
+        container: Any, 
+        temp_dir: str, 
+        stdin_file: Optional[str] = None
+    ):
+        """
+        Copy code and stdin files to container.
+        
+        Args:
+            container: Docker container
+            temp_dir: Temporary directory with files
+            stdin_file: Path to stdin file (optional)
+        """
+        import tarfile
+        import io
+        
+        # Create tar archive with all files
+        tar_stream = io.BytesIO()
+        with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+            # Add all files from temp_dir
+            for filename in os.listdir(temp_dir):
+                file_path = os.path.join(temp_dir, filename)
+                tar.add(file_path, arcname=filename)
+        
+        tar_stream.seek(0)
+        container.put_archive('/workspace', tar_stream)
     
     def _prepare_command(self, language: str, file_path: str, code: str) -> list:
         """

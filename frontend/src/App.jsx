@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CodeEditor, LANGUAGE_CONFIGS } from './components/Editor'
 import Console from './components/Console'
+import InputPanel from './components/InputPanel'
 import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
@@ -71,10 +72,11 @@ function WelcomeScreen({ onLanguageSelect }) {
 
 function EditorView({ language, onBack }) {
   const [code, setCode] = useState(LANGUAGE_CONFIGS[language]?.template || '')
+  const [stdin, setStdin] = useState('')
   const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
 
   const handleRunCode = async () => {
-    await executeCode(language, code)
+    await executeCode(language, code, stdin)
   }
 
   const handleStopExecution = () => {
@@ -121,12 +123,21 @@ function EditorView({ language, onBack }) {
       {/* Editor and Console */}
       <div className="flex-1 flex overflow-hidden">
         {/* Editor */}
-        <div className="flex-1 p-4">
-          <CodeEditor
-            language={language}
-            code={code}
-            onChange={setCode}
+        <div className="flex-1 p-4 flex flex-col gap-4">
+          {/* Input Panel */}
+          <InputPanel 
+            onInputChange={setStdin}
+            disabled={isRunning}
           />
+          
+          {/* Code Editor */}
+          <div className="flex-1">
+            <CodeEditor
+              language={language}
+              code={code}
+              onChange={setCode}
+            />
+          </div>
         </div>
         
         {/* Console */}
