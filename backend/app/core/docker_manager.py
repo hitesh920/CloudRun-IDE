@@ -17,19 +17,24 @@ class DockerManager:
     """Manages Docker containers for code execution."""
     
     def __init__(self):
-        """Initialize Docker client."""
+        """Initialize Docker client using low-level API."""
         try:
-            # Connect directly to Docker socket without http+docker scheme
-            import docker.transport
-            self.client = docker.DockerClient(
-                base_url='unix:///var/run/docker.sock',
-                timeout=10
-            )
-            self.client.ping()
-            print("✅ Docker client connected successfully")
+            # Use low-level APIClient directly with unix socket
+            from docker import APIClient
+            self.client = APIClient(base_url='unix:///var/run/docker.sock')
+            
+            # Test connection
+            version = self.client.version()
+            print(f"✅ Docker connected: {version.get('Version', 'unknown')}")
+            
+            # Wrap in high-level client for convenience
+            import docker
+            self._api = self.client
+            self.client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
+            
         except Exception as e:
             print(f"❌ Docker connection failed: {e}")
-            print("⚠️ Make sure /var/run/docker.sock is mounted in the container")
+            print(f"⚠️ Error type: {type(e).__name__}")
             raise
     
     def pull_image(self, language: str) -> bool:
