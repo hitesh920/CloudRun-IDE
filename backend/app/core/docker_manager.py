@@ -100,9 +100,6 @@ class DockerManager:
                 working_dir=working_dir,
                 environment=environment or {},
                 detach=True,
-                stdout=True,
-                stderr=True,
-                remove=False,  # We'll remove manually after getting logs
                 **resource_limits,
             )
             
