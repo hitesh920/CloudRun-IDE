@@ -294,5 +294,13 @@ class DockerManager:
             return None
 
 
-# Global Docker manager instance
-docker_manager = DockerManager()
+# Global Docker manager instance - initialized lazily
+docker_manager = None
+
+def get_docker_manager():
+    """Get or create the global Docker manager instance."""
+    global docker_manager
+    if docker_manager is None:
+        docker_manager = DockerManager()
+    return docker_manager
+

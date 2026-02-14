@@ -8,7 +8,7 @@ import tempfile
 from typing import Optional, Dict, Any, AsyncGenerator, List
 import asyncio
 
-from app.core.docker_manager import docker_manager
+from app.core.docker_manager import get_docker_manager
 from app.services.dependency_detector import dependency_detector
 from app.utils.constants import EXECUTION_COMMANDS, FILE_EXTENSIONS, CODE_TEMPLATES, DOCKER_IMAGES
 from app.utils.helpers import (
@@ -91,7 +91,7 @@ class CodeExecutor:
                         command = ["sh", "-c", f"{' '.join(command)} < /workspace/input.txt"]
                 
                 # Create container
-                container = docker_manager.create_container(
+                container = get_docker_manager().create_container(
                     execution_id=execution_id,
                     language=language,
                     command=command,
@@ -112,8 +112,8 @@ class CodeExecutor:
                 await self._copy_files_to_container(container, temp_dir)
                 
                 # Start container
-                if not docker_manager.start_container(container):
-                    docker_manager.remove_container(container)
+                if not get_docker_manager().start_container(container):
+                    get_docker_manager().remove_container(container)
                     yield {
                         "type": "error",
                         "content": "Failed to start container",
@@ -132,7 +132,7 @@ class CodeExecutor:
                 output_lines = []
                 
                 # Stream output
-                for line in docker_manager.get_logs_stream(container):
+                for line in get_docker_manager().get_logs_stream(container):
                     output_lines.append(line)
                     yield {
                         "type": "stdout",
@@ -141,7 +141,7 @@ class CodeExecutor:
                     }
                 
                 # Wait for completion
-                result = docker_manager.wait_container(container, timeout=1)
+                result = get_docker_manager().wait_container(container, timeout=1)
                 
                 # Get exit code
                 exit_code = result.get("StatusCode", 0)
@@ -186,7 +186,7 @@ class CodeExecutor:
                     }
                 
                 # Cleanup
-                docker_manager.cleanup_container(container)
+                get_docker_manager().cleanup_container(container)
                 del self.active_executions[execution_id]
                 
             except Exception as e:
@@ -198,7 +198,7 @@ class CodeExecutor:
                 
                 if execution_id in self.active_executions:
                     container = self.active_executions[execution_id]
-                    docker_manager.cleanup_container(container)
+                    get_docker_manager().cleanup_container(container)
                     del self.active_executions[execution_id]
     
     async def install_dependency(
@@ -235,11 +235,11 @@ class CodeExecutor:
                 }
             
             # Pull image first
-            docker_manager.pull_image(language)
+            get_docker_manager().pull_image(language)
             image_name = DOCKER_IMAGES.get(language, "python:3.11-slim")
             
             # Create container with network enabled for installation
-            container = docker_manager.client.containers.create(
+            container = get_docker_manager().client.containers.create(
                 image=image_name,
                 command=["sh", "-c", install_cmd],
                 name=f"cloudrun_install_{execution_id}",
@@ -278,7 +278,7 @@ class CodeExecutor:
             return False
         
         container = self.active_executions[execution_id]
-        docker_manager.cleanup_container(container)
+        get_docker_manager().cleanup_container(container)
         del self.active_executions[execution_id]
         return True
     
