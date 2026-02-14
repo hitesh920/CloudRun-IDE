@@ -4,7 +4,7 @@ uvicorn[standard]==0.27.0
 
 # Docker SDK for Python
 docker==7.0.0
-requests-unixsocket==0.3.0
+requests-unixsocket2==0.4.2
 
 # WebSocket support
 websockets==12.0
