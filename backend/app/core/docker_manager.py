@@ -17,24 +17,13 @@ class DockerManager:
     """Manages Docker containers for code execution."""
     
     def __init__(self):
-        """Initialize Docker client using low-level API."""
+        """Initialize Docker client."""
         try:
-            # Use low-level APIClient directly with unix socket
-            from docker import APIClient
-            self.client = APIClient(base_url='unix:///var/run/docker.sock')
-            
-            # Test connection
+            self.client = docker.from_env()
             version = self.client.version()
-            print(f"✅ Docker connected: {version.get('Version', 'unknown')}")
-            
-            # Wrap in high-level client for convenience
-            import docker
-            self._api = self.client
-            self.client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
-            
+            print(f"✅ Docker connected: API v{version.get('ApiVersion', 'unknown')}")
         except Exception as e:
             print(f"❌ Docker connection failed: {e}")
-            print(f"⚠️ Error type: {type(e).__name__}")
             raise
     
     def pull_image(self, language: str) -> bool:
