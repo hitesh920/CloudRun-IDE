@@ -1,205 +1,147 @@
-# CloudRun IDE - Deployment Guide
+# CloudRun IDE — Deployment Guide
 
-## 🚀 Quick Start (Docker Compose)
+## Docker Compose (Recommended)
 
 ### Prerequisites
-- Docker & Docker Compose installed
-- Port 80 available (or change in docker-compose.yml)
+
+- Docker & Docker Compose
+- Ports 80 and 8000 available
+- A free [Groq API key](https://console.groq.com/keys) or [Gemini API key](https://makersuite.google.com/app/apikey)
 
 ### Deploy
 
-1. **Set environment variables:**
-   ```bash
-   cp backend/.env.example backend/.env
-   # Edit backend/.env and add your GEMINI_API_KEY
-   ```
-
-2. **Start services:**
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Access the application:**
-   - Frontend: http://localhost
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
-
-4. **View logs:**
-   ```bash
-   docker-compose logs -f
-   ```
-
-5. **Stop services:**
-   ```bash
-   docker-compose down
-   ```
-
----
-
-## 🔧 Production Deployment (VPS)
-
-### For Oracle Cloud (ARM64)
-
-1. **SSH into your VPS:**
-   ```bash
-   ssh ubuntu@your-vps-ip
-   ```
-
-2. **Install Docker:**
-   ```bash
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
-   sudo usermod -aG docker $USER
-   ```
-
-3. **Install Docker Compose:**
-   ```bash
-   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-   sudo chmod +x /usr/local/bin/docker-compose
-   ```
-
-4. **Clone repository:**
-   ```bash
-   git clone <your-repo-url> cloudrun-ide
-   cd cloudrun-ide
-   ```
-
-5. **Configure environment:**
-   ```bash
-   cp backend/.env.example backend/.env
-   nano backend/.env  # Add GEMINI_API_KEY
-   ```
-
-6. **Start services:**
-   ```bash
-   docker-compose up -d
-   ```
-
-7. **Setup firewall (optional):**
-   ```bash
-   sudo ufw allow 80/tcp
-   sudo ufw allow 443/tcp
-   sudo ufw enable
-   ```
-
----
-
-## 🔐 HTTPS Setup (Optional)
-
-### Using Let's Encrypt with Certbot
-
-1. **Install Certbot:**
-   ```bash
-   sudo apt install certbot python3-certbot-nginx
-   ```
-
-2. **Get SSL certificate:**
-   ```bash
-   sudo certbot --nginx -d your-domain.com
-   ```
-
-3. **Auto-renewal:**
-   ```bash
-   sudo certbot renew --dry-run
-   ```
-
----
-
-## 📊 Monitoring
-
-### View logs:
 ```bash
-# All services
-docker-compose logs -f
+# 1. Configure
+cp backend/.env.example backend/.env
+nano backend/.env
+# Add: GROQ_API_KEY=gsk_...
 
-# Specific service
-docker-compose logs -f backend
-docker-compose logs -f frontend
+# 2. Start
+docker compose up -d
+
+# 3. Verify
+docker compose logs -f
+
+# 4. Access
+# http://localhost (or http://<server-ip>)
 ```
 
-### Check status:
+### Manage
+
 ```bash
-docker-compose ps
+docker compose ps          # Check status
+docker compose logs -f     # Stream logs
+docker compose restart     # Restart services
+docker compose down        # Stop everything
+docker compose up -d --build  # Rebuild and restart
 ```
 
-### Restart services:
+## VPS Deployment (Oracle Cloud / AWS / etc.)
+
+### 1. Install Docker
+
 ```bash
-docker-compose restart
+ssh ubuntu@your-server-ip
+
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in
+
+# Install Docker Compose (if not included)
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+  -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 ```
 
----
-
-## 🛠️ Troubleshooting
-
-### Backend can't connect to Docker
-- Ensure `/var/run/docker.sock` is mounted in docker-compose.yml
-- Check Docker permissions: `sudo usermod -aG docker $USER`
-
-### Frontend can't reach backend
-- Check backend is running: `docker-compose ps`
-- Verify Nginx proxy configuration in `frontend/nginx.conf`
-
-### Port already in use
-- Change ports in `docker-compose.yml`:
-  ```yaml
-  ports:
-    - "8080:80"  # Change 80 to 8080
-  ```
-
----
-
-## 🔄 Updates
-
-To update the application:
+### 2. Clone and Configure
 
 ```bash
+git clone https://github.com/hitesh920/CloudRun.git
+cd CloudRun
+cp backend/.env.example backend/.env
+nano backend/.env  # Add GROQ_API_KEY and/or GEMINI_API_KEY
+```
+
+### 3. Start
+
+```bash
+docker compose up -d
+docker compose logs -f  # Watch startup (image pulls take 2-3 min first time)
+```
+
+### 4. Firewall
+
+```bash
+# Oracle Cloud: Add ingress rules in VCN security list for ports 80, 8000
+
+# Ubuntu firewall
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 8000 -j ACCEPT
+```
+
+### 5. Access
+
+Open `http://<your-server-ip>` in a browser.
+
+## HTTPS (Optional)
+
+### With Certbot (requires a domain name)
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.com
+sudo certbot renew --dry-run  # Test auto-renewal
+```
+
+## Updating
+
+```bash
+cd CloudRun
 git pull
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+docker compose down
+docker compose up -d --build
+docker compose logs -f
 ```
 
----
+## Environment Variables
 
-## 📝 Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GROQ_API_KEY` | — | Groq API key (free, primary AI provider) |
+| `GEMINI_API_KEY` | — | Gemini API key (fallback AI provider) |
+| `DEBUG` | `True` | Debug mode |
+| `MAX_EXECUTION_TIME` | `60` | Timeout per execution (seconds) |
+| `MAX_MEMORY` | `1g` | Memory limit per container |
+| `MAX_CPU_QUOTA` | `100000` | CPU quota per container |
+| `RATE_LIMIT_PER_MINUTE` | `10` | API rate limit |
+| `PRE_PULL_IMAGES` | `True` | Pull all Docker images on startup |
+| `CORS_ORIGINS` | `*` | Allowed CORS origins |
 
-### Backend (.env)
-```env
-GEMINI_API_KEY=your_key_here
-DEBUG=False
-HOST=0.0.0.0
-PORT=8000
-CORS_ORIGINS=http://localhost,https://your-domain.com
-MAX_EXECUTION_TIME=60
-MAX_MEMORY=1g
-RATE_LIMIT_PER_MINUTE=10
+## Troubleshooting
+
+**Backend can't connect to Docker**
+- Check Docker socket mount in `docker-compose.yml`: `/var/run/docker.sock:/var/run/docker.sock`
+- Verify Docker is running: `docker ps`
+
+**Frontend shows connection error**
+- Check backend is healthy: `curl http://localhost:8000/health`
+- Check Nginx proxy: `docker compose logs frontend`
+
+**AI assistant not working**
+- Verify API key: `curl http://localhost:8000/api/ai/status`
+- Check backend logs for API errors: `docker compose logs backend | grep AI`
+
+**Ubuntu containers can't access network**
+- Ubuntu containers have `network_disabled=False` by default
+- Other languages have network disabled for security
+
+**Port 80 already in use**
+- Change in `docker-compose.yml`: `"8080:80"` instead of `"80:80"`
+
+## Monitoring
+
+```bash
+docker stats                    # Live resource usage
+docker compose ps               # Service status
+curl http://localhost:8000/api/status  # Full system status JSON
 ```
-
----
-
-## 🎯 Performance Tips
-
-1. **Increase container resources** (in docker-compose.yml):
-   ```yaml
-   deploy:
-     resources:
-       limits:
-         cpus: '2'
-         memory: 2G
-   ```
-
-2. **Enable caching** for faster builds
-3. **Use production mode** (DEBUG=False)
-4. **Monitor resource usage:**
-   ```bash
-   docker stats
-   ```
-
----
-
-## 🆘 Support
-
-For issues, check:
-- Backend logs: `docker-compose logs backend`
-- Frontend logs: `docker-compose logs frontend`
-- Docker status: `docker ps -a`

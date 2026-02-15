@@ -1,50 +1,111 @@
-# CloudRun IDE - Backend
+# CloudRun IDE — Backend
 
-FastAPI backend server for CloudRun IDE.
+FastAPI backend for CloudRun IDE. Handles code execution in Docker containers, real-time WebSocket streaming, and multi-provider AI assistance.
 
-## 🚀 Quick Setup
-
-### Prerequisites
-- Python 3.11+
-- Docker installed and running
-- Google Gemini API key
-
-### Installation
+## Quick Setup
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
-
-# Run server
+cp .env.example .env      # Add GROQ_API_KEY and/or GEMINI_API_KEY
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 📦 Key Dependencies
+Requires Docker running locally for code execution.
 
-- `fastapi` - Web framework
-- `uvicorn` - ASGI server
-- `docker` - Container management
-- `google-generativeai` - AI integration
-- `websockets` - Real-time communication
-- `slowapi` - Rate limiting
+## API Endpoints
 
-## 🔧 Configuration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/api/status` | Full system status |
+| `GET` | `/api/languages` | Supported languages |
+| `GET` | `/api/templates` | Code templates for all languages |
+| `GET` | `/api/templates/{lang}` | Template for specific language |
+| `POST` | `/api/execute` | Execute code (sync) |
+| `POST` | `/api/execute/stop/{id}` | Stop running execution |
+| `POST` | `/api/ai/assist` | AI code assistance |
+| `GET` | `/api/ai/status` | AI provider status |
+| `WS` | `/ws/execute` | WebSocket streaming execution |
 
-See `.env.example` for all available environment variables.
+Interactive docs at `http://localhost:8000/docs`.
 
-Required:
-- `GEMINI_API_KEY` - Get from https://makersuite.google.com/app/apikey
+## Supported Languages
 
----
+| Language | Image | Execution |
+|----------|-------|-----------|
+| Python 3.11 | `python:3.11-slim` | `python -u main.py` |
+| Node.js 20 | `node:20-alpine` | `node index.js` |
+| Java 21 | `eclipse-temurin:21-jdk` | `javac + java` |
+| C++ (GCC 12) | `gcc:12` | `g++ + run` |
+| HTML | None | Preview returned as WebSocket message |
+| Ubuntu Shell | `ubuntu:22.04` | `bash -c <code>` (network enabled) |
 
-**Status:** Dependencies configured ✅
+## AI Assistant
+
+Multi-provider with automatic fallback:
+
+1. **Groq** (primary) — Free, fast. Uses `llama-3.3-70b-versatile`.
+2. **Gemini** (fallback) — Google's `gemini-2.0-flash`.
+
+Actions: `fix_error`, `explain_error`, `explain_code`, `optimize_code`.
+
+## Configuration
+
+All settings via environment variables (`.env` file):
+
+```env
+# AI (at least one required for AI features)
+GROQ_API_KEY=gsk_...
+GEMINI_API_KEY=AIza...
+
+# Server
+HOST=0.0.0.0
+PORT=8000
+DEBUG=True
+
+# Execution limits
+MAX_EXECUTION_TIME=60
+MAX_MEMORY=1g
+MAX_CPU_QUOTA=100000
+MAX_CPU_PERIOD=100000
+
+# Misc
+CORS_ORIGINS=*
+RATE_LIMIT_PER_MINUTE=10
+PRE_PULL_IMAGES=True
+```
+
+## Key Dependencies
+
+- `fastapi` + `uvicorn` — Web framework and ASGI server
+- `docker` — Docker SDK for container management
+- `google-genai` — Gemini AI integration
+- `requests` — Groq API calls
+- `websockets` — Real-time streaming
+- `pydantic` + `pydantic-settings` — Data validation and config
+- `slowapi` — Rate limiting
+
+## Architecture
+
+```
+app/
+├── main.py              # FastAPI app, lifespan, CORS
+├── config.py            # Settings from .env
+├── models.py            # Pydantic models (LanguageEnum, etc.)
+├── api/
+│   ├── routes.py        # REST API endpoints
+│   └── websocket.py     # WebSocket execution endpoint
+├── core/
+│   ├── docker_manager.py # Container lifecycle management
+│   ├── executor.py       # Code execution + streaming
+│   └── websocket_manager.py # Connection tracking
+├── services/
+│   ├── ai_assistant.py   # Multi-provider AI (Groq + Gemini)
+│   └── dependency_detector.py # Missing package detection
+└── utils/
+    ├── constants.py      # Docker images, commands, templates
+    └── helpers.py        # Utility functions
+```

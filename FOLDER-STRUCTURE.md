@@ -1,61 +1,84 @@
-# CloudRun IDE - Folder Structure Guide
+# CloudRun IDE — Folder Structure
 
-## 📁 Step-by-Step Folder Creation
+## Full Project Tree
 
-### Step 1: Create Root Structure
 ```
-cloudrun-ide/
+CloudRun/
 ├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                 # FastAPI app, lifespan, startup
+│   │   ├── config.py               # Settings from .env
+│   │   ├── models.py               # Pydantic models, LanguageEnum
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── routes.py           # REST endpoints (/api/*)
+│   │   │   └── websocket.py        # WebSocket endpoint (/ws/execute)
+│   │   ├── core/
+│   │   │   ├── __init__.py
+│   │   │   ├── docker_manager.py   # Container create/start/stop/cleanup
+│   │   │   ├── executor.py         # Code execution + log streaming
+│   │   │   └── websocket_manager.py# Connection tracking
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── ai_assistant.py     # Groq + Gemini AI providers
+│   │   │   └── dependency_detector.py # Missing package detection
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── constants.py        # Docker images, commands, templates
+│   │       └── helpers.py          # ID generation, validation, etc.
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── .env.example
+│   ├── .dockerignore
+│   ├── .gitignore
+│   └── README.md
 ├── frontend/
+│   ├── public/
+│   │   └── vite.svg
+│   ├── src/
+│   │   ├── main.jsx                # React entry point
+│   │   ├── App.jsx                 # Main layout (VS Code theme)
+│   │   ├── index.css               # Tailwind + custom styles
+│   │   ├── components/
+│   │   │   ├── Editor.jsx          # Monaco editor + language configs
+│   │   │   ├── Console.jsx         # Terminal output
+│   │   │   ├── AIAssistant.jsx     # AI actions + auto-fix
+│   │   │   ├── FileExplorer.jsx    # File upload / drag-drop
+│   │   │   ├── InputPanel.jsx      # stdin input
+│   │   │   ├── DependencyPrompt.jsx# Missing package notification
+│   │   │   ├── StatusBar.jsx       # Bottom status bar
+│   │   │   └── ThemeToggle.jsx     # Theme switch
+│   │   ├── hooks/
+│   │   │   ├── useWebSocket.js     # WebSocket execution hook
+│   │   │   ├── useTheme.js         # Theme state management
+│   │   │   └── useKeyboardShortcuts.js # Ctrl+Enter, etc.
+│   │   └── services/
+│   │       ├── websocket.js        # WebSocket client singleton
+│   │       └── api.js              # REST API client
+│   ├── index.html
+│   ├── nginx.conf                  # Production reverse proxy
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── .env.example
+│   ├── .dockerignore
+│   ├── .gitignore
+│   └── README.md
 ├── deployment/
-└── docs/
+│   └── README.md                   # Deployment guide
+├── docker-compose.yml
+├── CONTRIBUTING.md
+├── FOLDER-STRUCTURE.md
+├── LICENSE
+├── .gitignore
+└── README.md
 ```
 
-### Step 2: Backend Folders
-```
-backend/
-├── app/
-│   ├── core/
-│   ├── services/
-│   ├── api/
-│   └── utils/
-├── dockerfiles/
-└── scripts/
-```
-
-### Step 3: Frontend Folders
-```
-frontend/
-├── public/
-└── src/
-    ├── components/
-    ├── services/
-    ├── hooks/
-    ├── utils/
-    └── styles/
-```
-
-## 🔧 Terminal Commands
+## Create from Scratch
 
 ```bash
-# Create all folders at once
-mkdir -p cloudrun-ide/{backend/{app/{core,services,api,utils},dockerfiles,scripts},frontend/{public,src/{components,services,hooks,utils,styles}},deployment,docs}
-```
-
-Or step by step:
-
-```bash
-# Navigate to project root
-cd cloudrun-ide
-
-# Backend
-mkdir -p backend/app/{core,services,api,utils}
-mkdir -p backend/{dockerfiles,scripts}
-
-# Frontend
-mkdir -p frontend/public
-mkdir -p frontend/src/{components,services,hooks,utils,styles}
-
-# Other
-mkdir -p deployment docs
+mkdir -p CloudRun/{backend/app/{api,core,services,utils},frontend/{public,src/{components,hooks,services}},deployment}
 ```
