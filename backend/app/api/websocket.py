@@ -42,6 +42,9 @@ async def websocket_execute_endpoint(websocket: WebSocket):
         language = data.get("language")
         code = data.get("code")
         stdin = data.get("stdin", "")
+        files = data.get("files", [])
+        
+        print(f"📝 Execution request: language={language}, code_length={len(code)}, has_stdin={bool(stdin)}, files={len(files)}")
         
         if not language or not code:
             await websocket.send_json({
@@ -53,24 +56,30 @@ async def websocket_execute_endpoint(websocket: WebSocket):
             return
         
         # Execute code with streaming
+        print(f"🚀 Starting execution for {language}")
         async for message in code_executor.execute_code_stream(
             language=language,
             code=code,
             stdin=stdin,
+            files=files,
         ):
+            print(f"📤 Sending: {message.get('type')} - {message.get('content', '')[:50]}")
             await websocket.send_json(message)
         
+        print(f"✅ Execution completed for {language}")
         # Close connection after execution
         await websocket.close()
         
     except WebSocketDisconnect:
-        print("WebSocket disconnected")
+        print("⚠️ WebSocket disconnected by client")
         if execution_id:
             # Stop execution if client disconnects
             code_executor.stop_execution(execution_id)
     
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"❌ WebSocket error: {e}")
+        import traceback
+        traceback.print_exc()
         try:
             await websocket.send_json({
                 "type": "error",
