@@ -17,7 +17,14 @@ services:
       - DEBUG=False
       - HOST=0.0.0.0
       - PORT=8000
+      - PRE_PULL_IMAGES=True
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - cloudrun-network
 
@@ -25,11 +32,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+        - VITE_WS_URL=
     container_name: cloudrun-frontend
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     restart: unless-stopped
     networks:
       - cloudrun-network

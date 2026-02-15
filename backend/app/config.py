@@ -25,8 +25,7 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             if v == "*":
                 return ["*"]
-            # Split by comma if string
-            return [origin.strip() for origin in v.split(',')]
+            return [origin.strip() for origin in v.split(',') if origin.strip()]
         return v
     
     # Google Gemini API
@@ -48,12 +47,16 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     MAX_FILES_PER_UPLOAD: int = 10
     
+    # Pre-pull Docker images on startup
+    PRE_PULL_IMAGES: bool = True
+    
     # Logging
     LOG_LEVEL: str = "INFO"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+    }
 
 
 # Create global settings instance

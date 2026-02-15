@@ -3,8 +3,8 @@ CloudRun IDE - API Routes
 REST API endpoints for code execution and management.
 """
 
-from fastapi import APIRouter, HTTPException, status
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, status, Request
+from typing import Optional
 from pydantic import BaseModel
 
 from app.models import (
@@ -25,6 +25,39 @@ class AIAssistRequest(BaseModel):
     code: Optional[str] = None
     error: Optional[str] = None
     language: str
+
+
+@router.get("/status")
+async def api_status():
+    """Full system status endpoint."""
+    docker_ok = False
+    docker_info = "unknown"
+    
+    try:
+        from app.core.docker_manager import get_docker_manager
+        dm = get_docker_manager()
+        dm.client.ping()
+        docker_ok = True
+        docker_info = "connected"
+    except Exception as e:
+        docker_info = f"error: {str(e)}"
+    
+    return {
+        "status": "running",
+        "version": "0.2.0",
+        "services": {
+            "docker": {
+                "status": "ok" if docker_ok else "error",
+                "info": docker_info,
+            },
+            "ai_assistant": {
+                "status": "ok" if ai_assistant.is_enabled() else "disabled",
+                "provider": "Google Gemini" if ai_assistant.is_enabled() else None,
+            },
+        },
+        "languages": [lang.value for lang in LanguageEnum],
+        "active_executions": len(code_executor.active_executions),
+    }
 
 
 @router.post("/execute", response_model=ExecutionResponse)
@@ -108,7 +141,7 @@ async def ai_assist(request: AIAssistRequest):
     if not ai_assistant.is_enabled():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI assistant is not configured. Please set GEMINI_API_KEY.",
+            detail="AI assistant is not configured. Please set GEMINI_API_KEY in backend/.env",
         )
     
     try:
@@ -136,13 +169,16 @@ async def ai_assist(request: AIAssistRequest):
             raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
         
         if not result.get("success"):
-            raise HTTPException(status_code=500, detail=result.get("error", "AI request failed"))
+            error_msg = result.get("error", "AI request failed")
+            print(f"❌ AI assist error: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
         
         return result
         
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ AI assistance error: {e}")
         raise HTTPException(status_code=500, detail=f"AI assistance failed: {str(e)}")
 
 

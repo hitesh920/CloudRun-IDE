@@ -20,8 +20,25 @@ function Console({ output = [], isRunning = false, onClear }) {
         return 'text-blue-400 italic'
       case 'complete':
         return 'text-green-400'
+      case 'dependency':
+        return 'text-yellow-400'
       default:
         return 'text-gray-300'
+    }
+  }
+
+  const getPrefix = (type) => {
+    switch (type) {
+      case 'status':
+        return '⚡ '
+      case 'error':
+        return '❌ '
+      case 'complete':
+        return '✅ '
+      case 'dependency':
+        return '📦 '
+      default:
+        return ''
     }
   }
 
@@ -42,7 +59,7 @@ function Console({ output = [], isRunning = false, onClear }) {
         <button
           onClick={onClear}
           className="text-xs text-gray-400 hover:text-white transition-colors"
-          title="Clear console"
+          title="Clear console (Ctrl+K)"
         >
           Clear
         </button>
@@ -53,13 +70,18 @@ function Console({ output = [], isRunning = false, onClear }) {
         {output.length === 0 ? (
           <div className="text-gray-500 text-sm">
             Output will appear here...
+            <br />
+            <span className="text-xs text-gray-600 mt-2 block">
+              Press Ctrl+Enter to run code
+            </span>
           </div>
         ) : (
           <>
             {output.map((msg, index) => (
               <div key={index} className={`mb-1 ${getMessageStyle(msg.type)}`}>
-                {msg.type === 'status' && <span className="text-gray-500">[{msg.timestamp}] </span>}
-                <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                <span className="whitespace-pre-wrap break-words">
+                  {getPrefix(msg.type)}{msg.content}
+                </span>
               </div>
             ))}
             <div ref={consoleEndRef} />

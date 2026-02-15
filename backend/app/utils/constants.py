@@ -7,7 +7,7 @@ Language configurations and system constants.
 DOCKER_IMAGES = {
     "python": "python:3.11-slim",
     "nodejs": "node:20-alpine",
-    "java": "eclipse-temurin:21-jre",
+    "java": "eclipse-temurin:21-jdk",
     "cpp": "gcc:12",
     "ubuntu": "ubuntu:22.04",
 }
@@ -22,16 +22,17 @@ FILE_EXTENSIONS = {
 }
 
 # Execution commands for each language
+# All commands use unbuffered output where possible
 EXECUTION_COMMANDS = {
     "python": ["python", "-u", "{file}"],
     "nodejs": ["node", "{file}"],
     "java": [
         "sh", "-c",
-        "javac {file} && java {classname}"
+        "javac {file} && java -cp /workspace {classname}"
     ],
     "cpp": [
         "sh", "-c",
-        "g++ {file} -o /tmp/program && /tmp/program"
+        "g++ -o /tmp/program {file} && /tmp/program"
     ],
     "ubuntu": ["bash", "-c", "{code}"],
 }
@@ -83,8 +84,9 @@ DEPENDENCY_PATTERNS = {
     },
     "nodejs": {
         "npm": [
-            r"Cannot find module '([\w-]+)'",
-            r"Error: Cannot find module '([\w-]+)'",
+            r"Cannot find module '([\w\-@/]+)'",
+            r"Error: Cannot find module '([\w\-@/]+)'",
+            r"Error \[ERR_MODULE_NOT_FOUND\].*'([\w\-@/]+)'",
         ]
     },
 }
@@ -99,7 +101,7 @@ INSTALL_COMMANDS = {
     },
 }
 
-# Container resource limits (will be overridden by config)
+# Container resource limits (defaults, overridden by config)
 DEFAULT_LIMITS = {
     "memory": "1g",
     "cpu_quota": 100000,
@@ -114,6 +116,7 @@ WS_MESSAGE_TYPES = {
     "STATUS": "status",
     "ERROR": "error",
     "COMPLETE": "complete",
+    "DEPENDENCY": "dependency",
 }
 
 # Execution statuses

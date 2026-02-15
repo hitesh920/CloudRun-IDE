@@ -3,7 +3,6 @@ CloudRun IDE - AI Assistant
 Google Gemini integration for code assistance.
 """
 
-import google.generativeai as genai
 from typing import Optional, Dict
 from app.config import settings
 
@@ -13,34 +12,57 @@ class AIAssistant:
     
     def __init__(self):
         """Initialize Gemini API."""
-        if settings.GEMINI_API_KEY:
+        self.enabled = False
+        self.model = None
+        
+        if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here":
+            print("⚠️  AI Assistant: DISABLED (no valid API key)")
+            return
+        
+        try:
+            import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
             self.model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # Quick validation - don't actually call the API
             self.enabled = True
-            print("✅ Gemini AI Assistant initialized")
-        else:
+            print("✅ AI Assistant (Gemini 1.5 Flash): initialized")
+        except Exception as e:
+            print(f"❌ AI Assistant initialization failed: {e}")
             self.enabled = False
-            print("⚠️ Gemini API key not found - AI features disabled")
     
     def is_enabled(self) -> bool:
         """Check if AI assistant is enabled."""
         return self.enabled
     
-    async def fix_error(self, code: str, error: str, language: str) -> Optional[Dict]:
-        """
-        Analyze error and suggest fix.
-        
-        Args:
-            code: Source code
-            error: Error message
-            language: Programming language
-            
-        Returns:
-            Dictionary with fixed code and explanation
-        """
+    async def _generate(self, prompt: str) -> Dict:
+        """Generate content from Gemini with error handling."""
         if not self.enabled:
-            return {"error": "AI assistant not configured"}
+            return {"success": False, "error": "AI assistant not configured"}
         
+        try:
+            import asyncio
+            # Run synchronous API call in thread pool
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.model.generate_content(prompt)
+            )
+            
+            return {
+                "success": True,
+                "response": response.text,
+            }
+        except Exception as e:
+            error_msg = str(e)
+            print(f"❌ Gemini API error: {error_msg}")
+            return {
+                "success": False,
+                "error": f"AI request failed: {error_msg}",
+            }
+    
+    async def fix_error(self, code: str, error: str, language: str) -> Dict:
+        """Analyze error and suggest fix."""
         prompt = f"""You are a helpful programming assistant. A {language} program has an error.
 
 CODE:
@@ -52,7 +74,7 @@ ERROR:
 {error}
 
 Please:
-1. Explain what's wrong
+1. Explain what's wrong (briefly)
 2. Provide the corrected code
 3. Explain the fix
 
@@ -64,34 +86,13 @@ Format your response as:
 (corrected code here)
 ```
 """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return {
-                "success": True,
-                "response": response.text,
-                "action": "fix_error"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        result = await self._generate(prompt)
+        if result.get("success"):
+            result["action"] = "fix_error"
+        return result
     
-    async def explain_error(self, error: str, language: str) -> Optional[Dict]:
-        """
-        Explain what an error means.
-        
-        Args:
-            error: Error message
-            language: Programming language
-            
-        Returns:
-            Dictionary with explanation
-        """
-        if not self.enabled:
-            return {"error": "AI assistant not configured"}
-        
+    async def explain_error(self, error: str, language: str) -> Dict:
+        """Explain what an error means."""
         prompt = f"""You are a helpful programming assistant. Explain this {language} error in simple terms:
 
 ERROR:
@@ -104,34 +105,13 @@ Please explain:
 
 Keep it concise and beginner-friendly.
 """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return {
-                "success": True,
-                "response": response.text,
-                "action": "explain_error"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        result = await self._generate(prompt)
+        if result.get("success"):
+            result["action"] = "explain_error"
+        return result
     
-    async def explain_code(self, code: str, language: str) -> Optional[Dict]:
-        """
-        Explain what code does.
-        
-        Args:
-            code: Source code
-            language: Programming language
-            
-        Returns:
-            Dictionary with explanation
-        """
-        if not self.enabled:
-            return {"error": "AI assistant not configured"}
-        
+    async def explain_code(self, code: str, language: str) -> Dict:
+        """Explain what code does."""
         prompt = f"""You are a helpful programming assistant. Explain this {language} code:
 
 CODE:
@@ -146,34 +126,13 @@ Please explain:
 
 Keep it clear and educational.
 """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return {
-                "success": True,
-                "response": response.text,
-                "action": "explain_code"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        result = await self._generate(prompt)
+        if result.get("success"):
+            result["action"] = "explain_code"
+        return result
     
-    async def optimize_code(self, code: str, language: str) -> Optional[Dict]:
-        """
-        Suggest code optimizations.
-        
-        Args:
-            code: Source code
-            language: Programming language
-            
-        Returns:
-            Dictionary with optimized code and suggestions
-        """
-        if not self.enabled:
-            return {"error": "AI assistant not configured"}
-        
+    async def optimize_code(self, code: str, language: str) -> Dict:
+        """Suggest code optimizations."""
         prompt = f"""You are a helpful programming assistant. Review and optimize this {language} code:
 
 CODE:
@@ -194,56 +153,10 @@ Please provide:
 (improved code here)
 ```
 """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return {
-                "success": True,
-                "response": response.text,
-                "action": "optimize_code"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
-    
-    async def chat(self, message: str, context: Optional[str] = None) -> Optional[Dict]:
-        """
-        General chat with AI about code.
-        
-        Args:
-            message: User message
-            context: Optional code context
-            
-        Returns:
-            Dictionary with AI response
-        """
-        if not self.enabled:
-            return {"error": "AI assistant not configured"}
-        
-        prompt = message
-        if context:
-            prompt = f"""Context:
-```
-{context}
-```
-
-Question: {message}
-"""
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return {
-                "success": True,
-                "response": response.text,
-                "action": "chat"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        result = await self._generate(prompt)
+        if result.get("success"):
+            result["action"] = "optimize_code"
+        return result
 
 
 # Global AI assistant instance

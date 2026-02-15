@@ -1,12 +1,12 @@
 /**
  * REST API service for CloudRun IDE
+ * Uses relative URLs to go through Nginx proxy in production
  */
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 class ApiService {
   constructor() {
-    this.baseURL = API_URL
+    // Use relative URL - works both in dev (via Vite proxy) and prod (via Nginx)
+    this.baseURL = ''
   }
 
   /**
@@ -41,6 +41,13 @@ class ApiService {
    */
   async healthCheck() {
     return this.request('/health')
+  }
+
+  /**
+   * Get system status
+   */
+  async getStatus() {
+    return this.request('/api/status')
   }
 
   /**
@@ -85,6 +92,13 @@ class ApiService {
     return this.request(`/api/execute/stop/${executionId}`, {
       method: 'POST',
     })
+  }
+
+  /**
+   * Get AI assistant status
+   */
+  async getAIStatus() {
+    return this.request('/api/ai/status')
   }
 }
 

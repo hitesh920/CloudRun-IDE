@@ -22,17 +22,21 @@ export function useWebSocket() {
 
     if (message.type === 'complete' || message.type === 'error') {
       setIsRunning(false)
+      setIsConnected(false)
     }
   }, [])
 
-  // Subscribe to WebSocket messages
+  // Subscribe to WebSocket messages on mount
   useEffect(() => {
+    // Register handler once - it persists across connections
     unsubscribeRef.current = websocketService.onMessage(handleMessage)
 
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current()
+        unsubscribeRef.current = null
       }
+      websocketService.disconnect()
     }
   }, [handleMessage])
 
@@ -42,14 +46,16 @@ export function useWebSocket() {
       // Clear previous output
       setOutput([])
       setIsRunning(true)
+      setIsConnected(false)
 
-      // Connect and execute
+      // Connect and execute (disconnect happens automatically in websocket service)
       await websocketService.connect(language, code, stdin, files)
       setIsConnected(true)
     } catch (error) {
-      setOutput([{
+      console.error('Execute error:', error)
+      setOutput(prev => [...prev, {
         type: 'error',
-        content: `Failed to connect: ${error.message}`,
+        content: `Connection failed: ${error.message}. Make sure the backend is running.`,
         timestamp: new Date().toISOString(),
       }])
       setIsRunning(false)
@@ -72,13 +78,6 @@ export function useWebSocket() {
   // Clear output
   const clearOutput = useCallback(() => {
     setOutput([])
-  }, [])
-
-  // Disconnect on unmount
-  useEffect(() => {
-    return () => {
-      websocketService.disconnect()
-    }
   }, [])
 
   return {

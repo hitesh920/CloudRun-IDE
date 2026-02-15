@@ -4,20 +4,29 @@
 
 import { useState, useEffect } from 'react'
 
+function getStoredTheme() {
+  try {
+    return localStorage.getItem('cloudrun-theme') || 'dark'
+  } catch {
+    return 'dark'
+  }
+}
+
+function storeTheme(theme) {
+  try {
+    localStorage.setItem('cloudrun-theme', theme)
+  } catch {
+    // localStorage not available, ignore
+  }
+}
+
 export function useTheme() {
-  const [theme, setTheme] = useState(() => {
-    // Get theme from localStorage or default to 'dark'
-    const savedTheme = localStorage.getItem('cloudrun-theme')
-    return savedTheme || 'dark'
-  })
+  const [theme, setTheme] = useState(getStoredTheme)
 
   useEffect(() => {
-    // Apply theme to document
     document.documentElement.classList.remove('light', 'dark')
     document.documentElement.classList.add(theme)
-    
-    // Save to localStorage
-    localStorage.setItem('cloudrun-theme', theme)
+    storeTheme(theme)
   }, [theme])
 
   const toggleTheme = () => {

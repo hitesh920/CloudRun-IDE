@@ -1,14 +1,22 @@
 /**
  * WebSocket service for real-time code execution
+ * Connects through Nginx proxy (relative URL)
  */
-
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
 
 class WebSocketService {
   constructor() {
     this.ws = null
-    this.messageHandlers = []
+    this.messageHandlers = new Set()
     this.isConnected = false
+  }
+
+  /**
+   * Get the WebSocket URL based on current page location
+   */
+  _getWsUrl() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    return `${protocol}//${host}`
   }
 
   /**
@@ -17,50 +25,72 @@ class WebSocketService {
   connect(language, code, stdin = '', files = []) {
     return new Promise((resolve, reject) => {
       try {
-        // Close existing connection if any
+        // Always close existing connection first
         this.disconnect()
 
-        // Create WebSocket connection
-        this.ws = new WebSocket(`${WS_URL}/ws/execute`)
+        const wsUrl = this._getWsUrl()
+        console.log(`🔌 Connecting to ${wsUrl}/ws/execute`)
+
+        this.ws = new WebSocket(`${wsUrl}/ws/execute`)
+
+        // Connection timeout
+        const connectTimeout = setTimeout(() => {
+          if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+            console.error('❌ WebSocket connection timeout')
+            this.ws.close()
+            reject(new Error('Connection timeout'))
+          }
+        }, 10000)
 
         this.ws.onopen = () => {
+          clearTimeout(connectTimeout)
           console.log('✅ WebSocket connected')
           this.isConnected = true
 
-          // Send execution request with files
-          this.ws.send(JSON.stringify({
+          // Send execution request
+          const payload = JSON.stringify({
             language,
             code,
             stdin,
-            files,  // Array of {name, content}
-          }))
-
+            files,
+          })
+          
+          console.log(`📤 Sending execution request: ${language}, ${code.length} chars`)
+          this.ws.send(payload)
           resolve()
         }
 
         this.ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data)
-            console.log('📨 Received:', message)
-
-            // Call all registered message handlers
-            this.messageHandlers.forEach(handler => handler(message))
+            // Notify all handlers
+            this.messageHandlers.forEach(handler => {
+              try {
+                handler(message)
+              } catch (e) {
+                console.error('Handler error:', e)
+              }
+            })
           } catch (error) {
             console.error('Failed to parse message:', error)
           }
         }
 
         this.ws.onerror = (error) => {
+          clearTimeout(connectTimeout)
           console.error('❌ WebSocket error:', error)
-          reject(error)
+          this.isConnected = false
+          reject(new Error('WebSocket connection failed'))
         }
 
-        this.ws.onclose = () => {
-          console.log('👋 WebSocket disconnected')
+        this.ws.onclose = (event) => {
+          clearTimeout(connectTimeout)
+          console.log(`🔌 WebSocket closed (code: ${event.code}, reason: ${event.reason || 'none'})`)
           this.isConnected = false
+          this.ws = null
         }
       } catch (error) {
-        console.error('Failed to connect:', error)
+        console.error('Failed to create WebSocket:', error)
         reject(error)
       }
     })
@@ -68,13 +98,13 @@ class WebSocketService {
 
   /**
    * Register a message handler
+   * Returns an unsubscribe function
    */
   onMessage(handler) {
-    this.messageHandlers.push(handler)
+    this.messageHandlers.add(handler)
     
-    // Return unsubscribe function
     return () => {
-      this.messageHandlers = this.messageHandlers.filter(h => h !== handler)
+      this.messageHandlers.delete(handler)
     }
   }
 
@@ -82,20 +112,27 @@ class WebSocketService {
    * Send a message to the server
    */
   send(message) {
-    if (this.ws && this.isConnected) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message))
     }
   }
 
   /**
    * Disconnect from WebSocket
+   * Does NOT clear message handlers (they persist across connections)
    */
   disconnect() {
     if (this.ws) {
-      this.ws.close()
+      try {
+        if (this.ws.readyState === WebSocket.OPEN || 
+            this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.close(1000, 'Client disconnect')
+        }
+      } catch (e) {
+        // Ignore close errors
+      }
       this.ws = null
       this.isConnected = false
-      this.messageHandlers = []
     }
   }
 
@@ -103,7 +140,7 @@ class WebSocketService {
    * Check if connected
    */
   getConnectionStatus() {
-    return this.isConnected
+    return this.isConnected && this.ws?.readyState === WebSocket.OPEN
   }
 }
 

@@ -29,7 +29,7 @@ function App() {
   return (
     <div className={`h-screen w-screen flex flex-col ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       {currentView === 'welcome' ? (
-        <WelcomeScreen onLanguageSelect={handleLanguageSelect} theme={theme} />
+        <WelcomeScreen onLanguageSelect={handleLanguageSelect} theme={theme} toggleTheme={toggleTheme} />
       ) : (
         <EditorView 
           language={selectedLanguage} 
@@ -42,7 +42,7 @@ function App() {
   )
 }
 
-function WelcomeScreen({ onLanguageSelect, theme }) {
+function WelcomeScreen({ onLanguageSelect, theme, toggleTheme }) {
   const languages = [
     { id: 'python', name: 'Python', icon: '🐍' },
     { id: 'nodejs', name: 'Node.js', icon: '🟢' },
@@ -52,30 +52,37 @@ function WelcomeScreen({ onLanguageSelect, theme }) {
   ]
 
   return (
-    <div className={`flex-1 flex items-center justify-center ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-blue-50 via-white to-purple-50'}`}>
-      <div className="text-center">
-        <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-          CloudRun IDE
-        </h1>
-        <p className={`text-xl mb-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-          Choose a programming language to start coding
-        </p>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 max-w-4xl">
-          {languages.map((lang) => (
-            <button
-              key={lang.id}
-              onClick={() => onLanguageSelect(lang.id)}
-              className={`rounded-lg p-8 transition-all duration-200 transform hover:scale-105 ${
-                theme === 'dark'
-                  ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20'
-                  : 'bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-400/20'
-              }`}
-            >
-              <div className="text-5xl mb-3">{lang.icon}</div>
-              <div className="text-lg font-semibold">{lang.name}</div>
-            </button>
-          ))}
+    <div className={`flex-1 flex flex-col ${theme === 'dark' ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-blue-50 via-white to-purple-50'}`}>
+      {/* Top bar with theme toggle */}
+      <div className="flex justify-end p-4">
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
+      </div>
+      
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+            CloudRun IDE
+          </h1>
+          <p className={`text-xl mb-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            Choose a programming language to start coding
+          </p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 max-w-4xl">
+            {languages.map((lang) => (
+              <button
+                key={lang.id}
+                onClick={() => onLanguageSelect(lang.id)}
+                className={`rounded-lg p-8 transition-all duration-200 transform hover:scale-105 ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20'
+                    : 'bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-400/20'
+                }`}
+              >
+                <div className="text-5xl mb-3">{lang.icon}</div>
+                <div className="text-lg font-semibold">{lang.name}</div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -101,11 +108,22 @@ function EditorView({ language, onBack, theme, onToggleTheme }) {
     onStop: stopExecution,
     onClear: clearOutput,
     onSave: () => {
-      localStorage.setItem(`code-${language}`, code)
-      alert('Code saved!')
+      try {
+        localStorage.setItem(`code-${language}`, code)
+      } catch {}
     },
     isRunning,
   })
+
+  // Load saved code on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`code-${language}`)
+      if (saved) {
+        setCode(saved)
+      }
+    } catch {}
+  }, [language])
 
   useEffect(() => {
     const lastMessage = output[output.length - 1]
@@ -161,6 +179,8 @@ function EditorView({ language, onBack, theme, onToggleTheme }) {
   }
 
   async function handleRunCode() {
+    if (isRunning) return
+    
     setMissingDependency(null)
     setLastError(null)
     const startTime = Date.now()
