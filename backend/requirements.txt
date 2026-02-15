@@ -35,3 +35,4 @@ loguru
 pytest
 pytest-asyncio
 httpx
+sqlalchemy>=2.0.0

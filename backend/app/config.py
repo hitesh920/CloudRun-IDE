@@ -1,64 +1,35 @@
 """
 CloudRun IDE - Configuration
-Application settings loaded from environment variables.
 """
 
+import os
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
-from typing import List, Union
+from typing import Optional
 
 
 class Settings(BaseSettings):
-    """Application settings."""
-    
-    # Server Configuration
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    DEBUG: bool = True
-    
-    # CORS Configuration
-    CORS_ORIGINS: Union[str, List[str]] = "*"
-    
-    @field_validator('CORS_ORIGINS', mode='before')
-    @classmethod
-    def parse_cors_origins(cls, v):
-        if isinstance(v, str):
-            if v == "*":
-                return ["*"]
-            return [origin.strip() for origin in v.split(',') if origin.strip()]
-        return v
-    
-    # AI API Keys (Groq is preferred, Gemini as fallback)
+    DEBUG: bool = False
+    CORS_ORIGINS: str = "*"
+    MAX_EXECUTION_TIME: int = 30
+    MAX_MEMORY: str = "256m"
+    MAX_CPU_QUOTA: int = 50000
+    MAX_CPU_PERIOD: int = 100000
+    MAX_REQUESTS_PER_MINUTE: int = 30
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
-    
-    # Docker Container Limits
-    MAX_EXECUTION_TIME: int = 60  # seconds
-    MAX_MEMORY: str = "1g"
-    MAX_CPU_QUOTA: int = 100000
-    MAX_CPU_PERIOD: int = 100000
-    
-    # Rate Limiting
-    RATE_LIMIT_PER_MINUTE: int = 10
-    
-    # Advanced Mode
-    ALLOW_ADVANCED_MODE: bool = True
-    
-    # File Upload Limits
-    MAX_FILE_SIZE_MB: int = 10
-    MAX_FILES_PER_UPLOAD: int = 10
-    
-    # Pre-pull Docker images on startup
-    PRE_PULL_IMAGES: bool = True
-    
-    # Logging
+    PRE_PULL_IMAGES: bool = False
+    MAX_UPLOAD_SIZE: int = 10485760
+    MAX_FILES_PER_REQUEST: int = 5
     LOG_LEVEL: str = "INFO"
-    
-    model_config = {
-        "env_file": ".env",
-        "case_sensitive": True,
-    }
+    JWT_SECRET: str = "cloudrun-ide-secret-change-me-in-production"
+    DATABASE_URL: Optional[str] = None
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
-# Create global settings instance
 settings = Settings()

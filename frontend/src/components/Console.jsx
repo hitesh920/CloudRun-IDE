@@ -1,4 +1,52 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
+
+// ANSI color code to CSS color mapping
+const ANSI_COLORS = {
+  '30': '#585858', '31': '#f44747', '32': '#608b4e', '33': '#dcdcaa',
+  '34': '#569cd6', '35': '#c586c0', '36': '#4ec9b0', '37': '#d4d4d4',
+  '90': '#6a6a6a', '91': '#f47070', '92': '#73c991', '93': '#e8e8a0',
+  '94': '#7cb3f0', '95': '#d0a0e0', '96': '#70dcc8', '97': '#ffffff',
+}
+
+function parseAnsi(text) {
+  if (!text) return [{ text: '', style: {} }]
+  const parts = []
+  let currentStyle = {}
+  const regex = /\x1b\[([0-9;]*)m/g
+  let lastIndex = 0
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, match.index), style: { ...currentStyle } })
+    }
+    const codes = match[1].split(';').filter(Boolean)
+    if (codes.length === 0 || (codes.length === 1 && codes[0] === '0') || match[1] === '') {
+      currentStyle = {}
+    } else {
+      for (const code of codes) {
+        if (code === '0') currentStyle = {}
+        else if (code === '1') currentStyle = { ...currentStyle, fontWeight: 'bold' }
+        else if (ANSI_COLORS[code]) currentStyle = { ...currentStyle, color: ANSI_COLORS[code] }
+      }
+    }
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), style: { ...currentStyle } })
+  }
+  return parts.length > 0 ? parts : [{ text, style: {} }]
+}
+
+function AnsiText({ text }) {
+  const parts = useMemo(() => parseAnsi(text), [text])
+  return (
+    <span>
+      {parts.map((part, i) => (
+        <span key={i} style={part.style}>{part.text}</span>
+      ))}
+    </span>
+  )
+}
 
 function Console({ output, isRunning, onClear, onInstallAndRerun, isInstalling }) {
   const scrollRef = useRef(null)
@@ -9,35 +57,27 @@ function Console({ output, isRunning, onClear, onInstallAndRerun, isInstalling }
     }
   }, [output])
 
-  const getMessageStyle = (type) => {
+  const getMessageColor = (type) => {
     switch (type) {
-      case 'status': return 'text-[#569cd6]'
-      case 'stdout': return 'text-[#d4d4d4]'
-      case 'stderr': return 'text-[#f44747]'
-      case 'error': return 'text-[#f44747]'
-      case 'complete': return 'text-[#608b4e]'
-      case 'dependency': return 'text-[#dcdcaa]'
-      case 'install_start': return 'text-[#569cd6]'
-      case 'install_complete': return 'text-[#608b4e]'
-      case 'install_error': return 'text-[#f44747]'
-      case 'html_preview': return ''
-      default: return 'text-[#d4d4d4]'
+      case 'status': return '#569cd6'
+      case 'stderr': case 'error': return '#f44747'
+      case 'complete': return '#608b4e'
+      case 'dependency': return '#dcdcaa'
+      case 'install_start': return '#569cd6'
+      case 'install_complete': return '#608b4e'
+      case 'install_error': return '#f44747'
+      default: return null
     }
   }
 
   const getPrefix = (type) => {
     switch (type) {
-      case 'status': return '› '
-      case 'complete': return '› '
+      case 'status': case 'complete': return '› '
       case 'dependency': return '⚠ '
-      case 'install_start': return '📦 '
-      case 'install_complete': return '✅ '
-      case 'install_error': return '❌ '
       default: return ''
     }
   }
 
-  // Find if there's a detected dependency in the output
   const dependencyMsg = output.find(m => m.type === 'dependency')
   const isComplete = output.some(m => m.type === 'complete')
   const showInstallButton = dependencyMsg && isComplete && !isRunning && !isInstalling
@@ -64,31 +104,40 @@ function Console({ output, isRunning, onClear, onInstallAndRerun, isInstalling }
             )
           }
 
-          const isError = msg.type === 'complete' && msg.content?.includes('failed')
+          const isFailComplete = msg.type === 'complete' && msg.content?.includes('failed')
+          const fixedColor = isFailComplete ? '#f44747' : getMessageColor(msg.type)
+          const prefix = getPrefix(msg.type)
+
+          if (fixedColor) {
+            return (
+              <div key={i} className="whitespace-pre-wrap break-all" style={{ color: fixedColor }}>
+                {prefix}{msg.content}
+              </div>
+            )
+          }
 
           return (
-            <div key={i} className={`${isError ? 'text-[#f44747]' : getMessageStyle(msg.type)} whitespace-pre-wrap break-all`}>
-              {getPrefix(msg.type)}{msg.content}
+            <div key={i} className="whitespace-pre-wrap break-all text-[#d4d4d4]">
+              {prefix}<AnsiText text={msg.content} />
             </div>
           )
         })}
 
         {isRunning && !isInstalling && (
-          <div className="text-[#569cd6] flex items-center gap-2">
+          <div className="flex items-center gap-2" style={{ color: '#569cd6' }}>
             <span className="animate-pulse">●</span> Running...
           </div>
         )}
 
-        {/* Install & Re-run Banner */}
         {showInstallButton && (
           <div className="mt-3 p-3 rounded bg-[#2d2a1e] border border-[#665c33]">
             <div className="flex items-center justify-between gap-3">
               <div className="flex-1">
-                <div className="text-[#dcdcaa] text-xs font-semibold mb-1">
+                <div className="text-xs font-semibold mb-1" style={{ color: '#dcdcaa' }}>
                   📦 Missing Package: {dependencyMsg.package_name}
                 </div>
-                <div className="text-[#858585] text-xs">
-                  Click to install <span className="text-[#ce9178]">{dependencyMsg.package_name}</span> and re-run your code automatically
+                <div className="text-xs" style={{ color: '#858585' }}>
+                  Click to install <span style={{ color: '#ce9178' }}>{dependencyMsg.package_name}</span> and re-run your code automatically
                 </div>
               </div>
               <button
@@ -101,9 +150,8 @@ function Console({ output, isRunning, onClear, onInstallAndRerun, isInstalling }
           </div>
         )}
 
-        {/* Installing indicator */}
         {isInstalling && (
-          <div className="text-[#569cd6] flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1" style={{ color: '#569cd6' }}>
             <svg className="animate-spin w-3 h-3" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="20 10"/>
             </svg>
