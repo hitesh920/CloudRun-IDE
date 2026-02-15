@@ -22,12 +22,15 @@ async def websocket_execute_endpoint(websocket: WebSocket):
     {
         "language": "python",
         "code": "print('Hello')",
-        "stdin": ""
+        "stdin": "",
+        "files": [],
+        "install_packages": ["requests"]  // optional - install before running
     }
     
     Server streams:
     {
-        "type": "stdout" | "stderr" | "status" | "error" | "complete",
+        "type": "stdout" | "stderr" | "status" | "error" | "complete" | 
+                "dependency" | "install_start" | "install_complete" | "install_error",
         "content": "message",
         "timestamp": "ISO timestamp"
     }
@@ -56,8 +59,11 @@ async def websocket_execute_endpoint(websocket: WebSocket):
         code = data.get("code")
         stdin = data.get("stdin", "")
         files = data.get("files", [])
+        install_packages = data.get("install_packages", None)
         
-        print(f"📝 Execution request: language={language}, code_length={len(code or '')}, has_stdin={bool(stdin)}, files={len(files)}")
+        print(f"📝 Execution request: language={language}, code_length={len(code or '')}, "
+              f"has_stdin={bool(stdin)}, files={len(files)}"
+              f"{f', install={install_packages}' if install_packages else ''}")
         
         if not language or not code:
             await _safe_send(websocket, {
@@ -74,6 +80,7 @@ async def websocket_execute_endpoint(websocket: WebSocket):
             code=code,
             stdin=stdin,
             files=files,
+            install_packages=install_packages,
         ):
             print(f"📤 Sending: {message.get('type')} - {message.get('content', '')[:80]}")
             

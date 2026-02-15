@@ -12,7 +12,7 @@ from app.config import settings
 from app.utils.constants import DOCKER_IMAGES
 from app.utils.helpers import generate_container_name
 
-# Languages that need network access
+# Languages that need network access by default
 NETWORK_ENABLED_LANGUAGES = {"ubuntu"}
 
 
@@ -58,16 +58,22 @@ class DockerManager:
         command: Optional[list] = None,
         working_dir: str = "/workspace",
         environment: Optional[Dict[str, str]] = None,
+        enable_network: bool = False,
     ) -> Optional[Any]:
-        """Create a Docker container for code execution."""
+        """Create a Docker container for code execution.
+        
+        Args:
+            enable_network: Force enable network (e.g. for package installation).
+                           Overrides the language-based default.
+        """
         if not self.pull_image(language):
             return None
         
         image_name = DOCKER_IMAGES[language]
         container_name = generate_container_name(execution_id, language)
         
-        # Ubuntu containers need network for apt-get, curl, etc.
-        disable_network = language not in NETWORK_ENABLED_LANGUAGES
+        # Enable network if: language requires it OR forced by caller (e.g. package install)
+        disable_network = not (language in NETWORK_ENABLED_LANGUAGES or enable_network)
         
         try:
             container = self.client.containers.create(
@@ -83,7 +89,8 @@ class DockerManager:
                 network_disabled=disable_network,
             )
             
-            print(f"✅ Container created: {container_name}" + (" (network: ON)" if not disable_network else ""))
+            net_label = "ON" if not disable_network else "OFF"
+            print(f"✅ Container created: {container_name} (network: {net_label})")
             return container
             
         except APIError as e:

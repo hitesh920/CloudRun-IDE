@@ -1,6 +1,7 @@
 """
 CloudRun IDE - Code Executor
 Handles code execution in Docker containers with streaming output.
+Supports package installation with live output streaming.
 """
 
 import os
@@ -27,6 +28,12 @@ from app.config import settings
 # Thread pool for blocking Docker operations
 _thread_pool = ThreadPoolExecutor(max_workers=4)
 
+# Install commands per language
+INSTALL_COMMANDS_MAP = {
+    "python": "pip install --no-cache-dir {packages}",
+    "nodejs": "cd /workspace && npm install {packages}",
+}
+
 
 class CodeExecutor:
     """Executes code in isolated Docker containers."""
@@ -41,10 +48,13 @@ class CodeExecutor:
         code: str,
         stdin: Optional[str] = None,
         files: Optional[List[Dict[str, Any]]] = None,
+        install_packages: Optional[List[str]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute code and stream output in real-time.
-        Yields output messages as they become available.
+        
+        If install_packages is provided, installs them first (with network)
+        then runs the code — all in a single container with live streaming.
         """
         # Handle HTML preview (no Docker needed)
         if language in NO_DOCKER_LANGUAGES:
@@ -53,7 +63,10 @@ class CodeExecutor:
             return
         
         execution_id = generate_execution_id()
-        print(f"🚀 Starting execution {execution_id} for {language}")
+        needs_install = bool(install_packages and language in INSTALL_COMMANDS_MAP)
+        
+        print(f"🚀 Starting execution {execution_id} for {language}" + 
+              (f" (installing: {', '.join(install_packages)})" if needs_install else ""))
         
         # Validate code
         is_valid, error_msg = validate_code(code, language)
@@ -66,11 +79,21 @@ class CodeExecutor:
             }
             return
         
-        yield {
-            "type": "status",
-            "content": "Starting execution...",
-            "timestamp": get_timestamp(),
-        }
+        # Show install status if installing
+        if needs_install:
+            pkgs_str = ", ".join(install_packages)
+            yield {
+                "type": "install_start",
+                "content": f"📦 Installing: {pkgs_str}...",
+                "packages": install_packages,
+                "timestamp": get_timestamp(),
+            }
+        else:
+            yield {
+                "type": "status",
+                "content": "Starting execution...",
+                "timestamp": get_timestamp(),
+            }
         
         container = None
         temp_dir_obj = tempfile.TemporaryDirectory()
@@ -89,16 +112,22 @@ class CodeExecutor:
                         file_data.get('content', '')
                     )
             
-            # Prepare command
-            command = self._prepare_command(language, file_path, code)
+            # Build command — with or without install prefix
+            if needs_install:
+                command = self._prepare_install_and_run_command(
+                    language, file_path, code, install_packages, bool(stdin)
+                )
+            else:
+                command = self._prepare_command(language, file_path, code)
+                # Handle stdin redirect for normal execution
+                if stdin and language != "ubuntu":
+                    command = ["sh", "-c", f"{' '.join(command)} < /workspace/input.txt"]
             
             # Prepare stdin file if provided
             if stdin:
                 self._prepare_stdin_file(temp_dir, stdin)
-                if language != "ubuntu":
-                    command = ["sh", "-c", f"{' '.join(command)} < /workspace/input.txt"]
             
-            # Create container (run in thread pool to not block)
+            # Create container — enable network if installing packages
             loop = asyncio.get_event_loop()
             container = await loop.run_in_executor(
                 _thread_pool,
@@ -107,6 +136,7 @@ class CodeExecutor:
                     language=language,
                     command=command,
                     working_dir="/workspace",
+                    enable_network=needs_install,
                 )
             )
             
@@ -141,21 +171,37 @@ class CodeExecutor:
                 }
                 return
             
-            yield {
-                "type": "status",
-                "content": "Running...",
-                "timestamp": get_timestamp(),
-            }
+            if needs_install:
+                yield {
+                    "type": "status",
+                    "content": "Installing packages...",
+                    "timestamp": get_timestamp(),
+                }
+            else:
+                yield {
+                    "type": "status",
+                    "content": "Running...",
+                    "timestamp": get_timestamp(),
+                }
             
-            # Stream logs asynchronously with timeout
+            # Stream logs with timeout (longer for install+run)
             output_lines = []
             timed_out = False
+            timeout = settings.MAX_EXECUTION_TIME * (2 if needs_install else 1)
             
             try:
-                async for line in self._stream_logs_async(container):
+                async for line in self._stream_logs_async(container, timeout=timeout):
                     output_lines.append(line)
+                    
+                    # Detect install → run transition
+                    msg_type = "stdout"
+                    if needs_install and "▶▶▶ RUNNING CODE ▶▶▶" in line:
+                        msg_type = "install_complete"
+                    elif needs_install and "❌ INSTALL FAILED" in line:
+                        msg_type = "install_error"
+                    
                     yield {
-                        "type": "stdout",
+                        "type": msg_type,
                         "content": line,
                         "timestamp": get_timestamp(),
                     }
@@ -163,7 +209,7 @@ class CodeExecutor:
                 timed_out = True
                 yield {
                     "type": "error",
-                    "content": f"Execution timed out after {settings.MAX_EXECUTION_TIME} seconds",
+                    "content": f"Execution timed out after {timeout} seconds",
                     "timestamp": get_timestamp(),
                 }
             
@@ -180,8 +226,8 @@ class CodeExecutor:
             else:
                 exit_code = -1
             
-            # Check for missing dependencies if execution failed
-            if exit_code != 0 and not timed_out:
+            # Check for missing dependencies if execution failed (and not already installing)
+            if exit_code != 0 and not timed_out and not needs_install:
                 full_output = ''.join(output_lines)
                 missing_dep = dependency_detector.detect_missing_dependency(
                     full_output, language
@@ -262,7 +308,6 @@ class CodeExecutor:
             "timestamp": get_timestamp(),
         }
         
-        # Send HTML content as a special preview message
         yield {
             "type": "html_preview",
             "content": code,
@@ -275,10 +320,11 @@ class CodeExecutor:
             "timestamp": get_timestamp(),
         }
     
-    async def _stream_logs_async(self, container) -> AsyncGenerator[str, None]:
+    async def _stream_logs_async(self, container, timeout=None) -> AsyncGenerator[str, None]:
         """Stream container logs asynchronously with timeout."""
         loop = asyncio.get_event_loop()
         queue = asyncio.Queue()
+        timeout = timeout or settings.MAX_EXECUTION_TIME
         
         def _read_logs():
             """Read logs in a thread and put them in the queue."""
@@ -290,11 +336,8 @@ class CodeExecutor:
                 pass
             loop.call_soon_threadsafe(queue.put_nowait, None)
         
-        # Start log reader in thread
         loop.run_in_executor(_thread_pool, _read_logs)
         
-        # Read from queue with timeout
-        timeout = settings.MAX_EXECUTION_TIME
         start_time = asyncio.get_event_loop().time()
         
         while True:
@@ -404,6 +447,64 @@ class CodeExecutor:
             command.append(part)
         
         return command
+    
+    def _prepare_install_and_run_command(
+        self, 
+        language: str, 
+        file_path: str, 
+        code: str,
+        packages: List[str],
+        has_stdin: bool,
+    ) -> list:
+        """Build a command that installs packages then runs code.
+        
+        Creates a shell script that:
+        1. Installs packages with live output
+        2. Prints a separator marker
+        3. Runs the user's code
+        """
+        filename = os.path.basename(file_path)
+        pkgs_str = " ".join(packages)
+        
+        if language == "python":
+            install_cmd = f"pip install --no-cache-dir {pkgs_str}"
+            run_cmd = f"python -u /workspace/{filename}"
+        elif language == "nodejs":
+            install_cmd = f"cd /workspace && npm install {pkgs_str}"
+            run_cmd = f"node /workspace/{filename}"
+        else:
+            # Fallback — no install support for this language
+            return self._prepare_command(language, file_path, code)
+        
+        # Add stdin redirect if needed
+        if has_stdin:
+            run_cmd += " < /workspace/input.txt"
+        
+        # Build shell script: install → marker → run
+        # The marker helps frontend detect the transition
+        script = (
+            f'echo "📦 Installing: {pkgs_str}" && '
+            f'echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━" && '
+            f'{install_cmd} 2>&1 && '
+            f'echo "" && '
+            f'echo "✅ Installation complete!" && '
+            f'echo "▶▶▶ RUNNING CODE ▶▶▶" && '
+            f'echo "" && '
+            f'{run_cmd}'
+        )
+        
+        # If install fails, show error
+        full_script = (
+            f'({install_cmd} 2>&1) && '
+            f'echo "" && '
+            f'echo "✅ Installation complete!" && '
+            f'echo "▶▶▶ RUNNING CODE ▶▶▶" && '
+            f'echo "" && '
+            f'{run_cmd} || '
+            f'(echo "" && echo "❌ INSTALL FAILED — check package name and try again")'
+        )
+        
+        return ["sh", "-c", full_script]
     
     def get_code_template(self, language: str) -> str:
         """Get starter code template for a language."""

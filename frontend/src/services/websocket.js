@@ -21,8 +21,13 @@ class WebSocketService {
 
   /**
    * Connect to WebSocket server and execute code
+   * @param {string} language
+   * @param {string} code
+   * @param {string} stdin
+   * @param {Array} files
+   * @param {Array|null} installPackages - optional packages to install before running
    */
-  connect(language, code, stdin = '', files = []) {
+  connect(language, code, stdin = '', files = [], installPackages = null) {
     return new Promise((resolve, reject) => {
       try {
         // Always close existing connection first
@@ -48,15 +53,21 @@ class WebSocketService {
           this.isConnected = true
 
           // Send execution request
-          const payload = JSON.stringify({
+          const payload = {
             language,
             code,
             stdin,
             files,
-          })
+          }
+
+          // Include install_packages if provided
+          if (installPackages && installPackages.length > 0) {
+            payload.install_packages = installPackages
+            console.log(`📦 Installing packages: ${installPackages.join(', ')}`)
+          }
           
           console.log(`📤 Sending execution request: ${language}, ${code.length} chars`)
-          this.ws.send(payload)
+          this.ws.send(JSON.stringify(payload))
           resolve()
         }
 

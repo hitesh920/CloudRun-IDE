@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-function Console({ output, isRunning, onClear }) {
+function Console({ output, isRunning, onClear, onInstallAndRerun, isInstalling }) {
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -16,6 +16,10 @@ function Console({ output, isRunning, onClear }) {
       case 'stderr': return 'text-[#f44747]'
       case 'error': return 'text-[#f44747]'
       case 'complete': return 'text-[#608b4e]'
+      case 'dependency': return 'text-[#dcdcaa]'
+      case 'install_start': return 'text-[#569cd6]'
+      case 'install_complete': return 'text-[#608b4e]'
+      case 'install_error': return 'text-[#f44747]'
       case 'html_preview': return ''
       default: return 'text-[#d4d4d4]'
     }
@@ -25,9 +29,18 @@ function Console({ output, isRunning, onClear }) {
     switch (type) {
       case 'status': return '› '
       case 'complete': return '› '
+      case 'dependency': return '⚠ '
+      case 'install_start': return '📦 '
+      case 'install_complete': return '✅ '
+      case 'install_error': return '❌ '
       default: return ''
     }
   }
+
+  // Find if there's a detected dependency in the output
+  const dependencyMsg = output.find(m => m.type === 'dependency')
+  const isComplete = output.some(m => m.type === 'complete')
+  const showInstallButton = dependencyMsg && isComplete && !isRunning && !isInstalling
 
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e] overflow-hidden">
@@ -60,9 +73,41 @@ function Console({ output, isRunning, onClear }) {
           )
         })}
 
-        {isRunning && (
+        {isRunning && !isInstalling && (
           <div className="text-[#569cd6] flex items-center gap-2">
             <span className="animate-pulse">●</span> Running...
+          </div>
+        )}
+
+        {/* Install & Re-run Banner */}
+        {showInstallButton && (
+          <div className="mt-3 p-3 rounded bg-[#2d2a1e] border border-[#665c33]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                <div className="text-[#dcdcaa] text-xs font-semibold mb-1">
+                  📦 Missing Package: {dependencyMsg.package_name}
+                </div>
+                <div className="text-[#858585] text-xs">
+                  Click to install <span className="text-[#ce9178]">{dependencyMsg.package_name}</span> and re-run your code automatically
+                </div>
+              </div>
+              <button
+                onClick={() => onInstallAndRerun && onInstallAndRerun([dependencyMsg.package_name])}
+                className="px-4 py-1.5 text-xs font-medium bg-[#0e639c] hover:bg-[#1177bb] text-white rounded transition-colors whitespace-nowrap"
+              >
+                Install &amp; Re-run
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Installing indicator */}
+        {isInstalling && (
+          <div className="text-[#569cd6] flex items-center gap-2 mt-1">
+            <svg className="animate-spin w-3 h-3" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="20 10"/>
+            </svg>
+            Installing packages...
           </div>
         )}
       </div>

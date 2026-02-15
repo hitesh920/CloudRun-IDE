@@ -3,7 +3,6 @@ import { CodeEditor, LANGUAGE_CONFIGS } from './components/Editor'
 import Console from './components/Console'
 import InputPanel from './components/InputPanel'
 import FileExplorer from './components/FileExplorer'
-import DependencyPrompt from './components/DependencyPrompt'
 import AIAssistant from './components/AIAssistant'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useTheme } from './hooks/useTheme'
@@ -71,13 +70,13 @@ function EditorView({ language, onBack }) {
   const [stdin, setStdin] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
-  const [missingDependency, setMissingDependency] = useState(null)
   const [lastError, setLastError] = useState(null)
   const [executionTime, setExecutionTime] = useState(null)
   const [bottomTab, setBottomTab] = useState('terminal')
   const [bottomPanelHeight, setBottomPanelHeight] = useState(280)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [isInstalling, setIsInstalling] = useState(false)
   const containerRef = useRef(null)
   
   const { output, isRunning, executeCode, stopExecution, clearOutput } = useWebSocket()
@@ -95,28 +94,26 @@ function EditorView({ language, onBack }) {
     try { const saved = localStorage.getItem(`code-${language}`); if (saved) setCode(saved) } catch {}
   }, [language])
 
-  // Track errors - capture ALL output when execution fails
+  // Track errors from output
   useEffect(() => {
     if (!output.length) return
     const lastMessage = output[output.length - 1]
     if (!lastMessage) return
 
-    if (lastMessage.type === 'dependency') {
-      setMissingDependency({
-        packageName: lastMessage.package_name,
-        packageManager: lastMessage.package_manager,
-        installCommand: lastMessage.install_command,
-      })
-    }
     if (lastMessage.type === 'stderr' || lastMessage.type === 'error') {
       setLastError(lastMessage.content)
     }
-    // When execution fails, collect stdout as error too (Python syntax errors come via stdout)
+    // When execution fails, collect stdout as error too
     if (lastMessage.type === 'complete' && lastMessage.content?.includes('failed')) {
       const errorLines = output
         .filter(m => m.type === 'stdout' || m.type === 'stderr' || m.type === 'error')
         .map(m => m.content).join('\n').trim()
       if (errorLines) setLastError(errorLines)
+    }
+    
+    // Reset installing state when complete
+    if (lastMessage.type === 'complete' || lastMessage.type === 'error') {
+      setIsInstalling(false)
     }
   }, [output])
 
@@ -152,15 +149,31 @@ function EditorView({ language, onBack }) {
 
   async function handleRunCode() {
     if (isRunning) return
-    setMissingDependency(null); setLastError(null)
+    setLastError(null)
+    setIsInstalling(false)
     const startTime = Date.now()
     const filesToSend = uploadedFiles.filter(f => f.name !== selectedFile).map(f => ({ name: f.name, content: f.content }))
     await executeCode(language, code, stdin, filesToSend)
     setExecutionTime(Date.now() - startTime)
   }
 
+  // Install & Re-run: installs packages then runs code in a single network-enabled container
+  async function handleInstallAndRerun(packages) {
+    if (isRunning) return
+    setLastError(null)
+    setIsInstalling(true)
+    setBottomTab('terminal') // Switch to terminal to see install output
+    const startTime = Date.now()
+    const filesToSend = uploadedFiles.filter(f => f.name !== selectedFile).map(f => ({ name: f.name, content: f.content }))
+    await executeCode(language, code, stdin, filesToSend, packages)
+    setExecutionTime(Date.now() - startTime)
+  }
+
   const langNames = { python: 'Python', nodejs: 'JavaScript', java: 'Java', cpp: 'C++', html: 'HTML', ubuntu: 'Ubuntu Shell' }
   const langExts = { python: 'main.py', nodejs: 'index.js', java: 'Main.java', cpp: 'main.cpp', html: 'index.html', ubuntu: 'script.sh' }
+
+  // Check if there's a detected dependency (for tab badge)
+  const hasDependency = output.some(m => m.type === 'dependency')
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" ref={containerRef}>
@@ -182,7 +195,7 @@ function EditorView({ language, onBack }) {
             className={`flex items-center gap-1.5 px-3 py-0.5 text-xs rounded transition-colors ${isRunning ? 'bg-[#3a3a3a] text-[#585858] cursor-not-allowed' : 'bg-[#0e639c] hover:bg-[#1177bb] text-white'}`}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3v10l8-5z"/></svg>
-            {isRunning ? 'Running...' : 'Run'}
+            {isRunning ? (isInstalling ? 'Installing...' : 'Running...') : 'Run'}
           </button>
         </div>
       </div>
@@ -240,7 +253,7 @@ function EditorView({ language, onBack }) {
           {/* Panel Tabs */}
           <div className="h-[35px] bg-[#252526] flex items-center px-2 gap-0 flex-shrink-0 border-b border-[#1e1e1e]">
             {[
-              { id: 'terminal', label: 'Terminal' },
+              { id: 'terminal', label: 'Terminal', badge: hasDependency },
               { id: 'ai', label: 'AI Assistant', badge: lastError ? true : false },
               { id: 'input', label: 'Input' },
             ].map(tab => (
@@ -255,7 +268,15 @@ function EditorView({ language, onBack }) {
 
           {/* Panel Content */}
           <div className="flex-1 overflow-hidden">
-            {bottomTab === 'terminal' && <Console output={output} isRunning={isRunning} onClear={clearOutput} />}
+            {bottomTab === 'terminal' && (
+              <Console 
+                output={output} 
+                isRunning={isRunning} 
+                onClear={clearOutput} 
+                onInstallAndRerun={handleInstallAndRerun}
+                isInstalling={isInstalling}
+              />
+            )}
             {bottomTab === 'ai' && <AIAssistant code={code} error={lastError} language={language} onCodeUpdate={setCode} />}
             {bottomTab === 'input' && (
               <div className="p-3 h-full">
@@ -270,7 +291,12 @@ function EditorView({ language, onBack }) {
       <div className="h-[22px] bg-[#007acc] flex items-center justify-between px-3 text-[11px] text-white flex-shrink-0 select-none">
         <div className="flex items-center gap-3">
           <span>{langNames[language]}</span>
-          {isRunning && <span className="flex items-center gap-1"><span className="animate-pulse">●</span> Running</span>}
+          {isRunning && (
+            <span className="flex items-center gap-1">
+              <span className="animate-pulse">●</span> 
+              {isInstalling ? 'Installing...' : 'Running'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span>Ln {linesOfCode}</span>
@@ -278,13 +304,6 @@ function EditorView({ language, onBack }) {
           <span>UTF-8</span>
         </div>
       </div>
-
-      {missingDependency && (
-        <DependencyPrompt packageName={missingDependency.packageName} packageManager={missingDependency.packageManager}
-          installCommand={missingDependency.installCommand}
-          onInstall={() => { alert('Coming soon!'); setMissingDependency(null) }}
-          onDismiss={() => setMissingDependency(null)} />
-      )}
     </div>
   )
 }

@@ -28,7 +28,6 @@ export function useWebSocket() {
 
   // Subscribe to WebSocket messages on mount
   useEffect(() => {
-    // Register handler once - it persists across connections
     unsubscribeRef.current = websocketService.onMessage(handleMessage)
 
     return () => {
@@ -41,15 +40,14 @@ export function useWebSocket() {
   }, [handleMessage])
 
   // Execute code via WebSocket
-  const executeCode = useCallback(async (language, code, stdin = '', files = []) => {
+  // installPackages: optional array of package names to install before running
+  const executeCode = useCallback(async (language, code, stdin = '', files = [], installPackages = null) => {
     try {
-      // Clear previous output
       setOutput([])
       setIsRunning(true)
       setIsConnected(false)
 
-      // Connect and execute (disconnect happens automatically in websocket service)
-      await websocketService.connect(language, code, stdin, files)
+      await websocketService.connect(language, code, stdin, files, installPackages)
       setIsConnected(true)
     } catch (error) {
       console.error('Execute error:', error)
