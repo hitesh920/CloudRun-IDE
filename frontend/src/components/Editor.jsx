@@ -1,30 +1,31 @@
-import { useState, useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import Editor from '@monaco-editor/react'
 
-const LANGUAGE_CONFIGS = {
-  python: { 
-    monaco: 'python',
+// Language configuration map
+export const LANGUAGE_CONFIGS = {
+  python: {
+    monacoLanguage: 'python',
     template: `# Python Code
 print("Hello, World!")
-`
+`,
   },
-  nodejs: { 
-    monaco: 'javascript',
+  nodejs: {
+    monacoLanguage: 'javascript',
     template: `// Node.js Code
 console.log("Hello, World!");
-`
+`,
   },
-  java: { 
-    monaco: 'java',
+  java: {
+    monacoLanguage: 'java',
     template: `public class Main {
     public static void main(String[] args) {
         System.out.println("Hello, World!");
     }
 }
-`
+`,
   },
-  cpp: { 
-    monaco: 'cpp',
+  cpp: {
+    monacoLanguage: 'cpp',
     template: `#include <iostream>
 using namespace std;
 
@@ -32,78 +33,86 @@ int main() {
     cout << "Hello, World!" << endl;
     return 0;
 }
-`
+`,
   },
-  html: { 
-    monaco: 'html',
+  html: {
+    monacoLanguage: 'html',
     template: `<!DOCTYPE html>
 <html>
 <head>
     <title>Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        h1 { color: #333; }
+    </style>
 </head>
 <body>
     <h1>Hello, World!</h1>
+    <p>Edit this HTML and click Run to preview.</p>
 </body>
 </html>
-`
+`,
+  },
+  ubuntu: {
+    monacoLanguage: 'shell',
+    template: `# Ubuntu Shell
+echo "Hello, World!"
+`,
   },
 }
 
-function CodeEditor({ language, code, onChange, theme = 'vs-dark' }) {
+export function CodeEditor({ language, code, onChange, theme = 'vs-dark' }) {
   const editorRef = useRef(null)
-  const languageConfig = LANGUAGE_CONFIGS[language] || LANGUAGE_CONFIGS.python
 
-  const handleEditorDidMount = (editor, monaco) => {
+  const handleEditorDidMount = (editor) => {
     editorRef.current = editor
-    
-    // Configure editor options
-    editor.updateOptions({
-      fontSize: 14,
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      wordWrap: 'on',
-      automaticLayout: true,
-    })
+    editor.focus()
   }
 
-  const handleEditorChange = (value) => {
-    if (onChange) {
-      onChange(value || '')
+  // Update editor value when code changes externally (e.g., AI fix)
+  useEffect(() => {
+    if (editorRef.current) {
+      const currentValue = editorRef.current.getValue()
+      if (currentValue !== code) {
+        editorRef.current.setValue(code)
+      }
     }
-  }
+  }, [code])
+
+  const config = LANGUAGE_CONFIGS[language] || LANGUAGE_CONFIGS.python
 
   return (
     <Editor
       height="100%"
-      language={languageConfig.monaco}
+      language={config.monacoLanguage}
       value={code}
       theme={theme}
-      onChange={handleEditorChange}
+      onChange={(value) => onChange(value || '')}
       onMount={handleEditorDidMount}
       options={{
-        selectOnLineNumbers: true,
-        roundedSelection: false,
-        readOnly: false,
-        cursorStyle: 'line',
-        automaticLayout: true,
         fontSize: 14,
-        fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-        lineNumbers: 'on',
-        tabSize: 4,
-        insertSpaces: true,
+        fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
+        minimap: { enabled: false },
         scrollBeyondLastLine: false,
-        wordWrap: 'on',
-        minimap: {
-          enabled: true,
+        automaticLayout: true,
+        tabSize: language === 'python' ? 4 : 2,
+        wordWrap: language === 'html' ? 'on' : 'off',
+        lineNumbers: 'on',
+        renderWhitespace: 'selection',
+        bracketPairColorization: { enabled: true },
+        guides: { bracketPairs: true },
+        padding: { top: 8 },
+        cursorBlinking: 'smooth',
+        smoothScrolling: true,
+        contextmenu: true,
+        folding: true,
+        suggest: {
+          showKeywords: true,
+          showSnippets: true,
         },
       }}
-      loading={
-        <div className="h-full flex items-center justify-center bg-gray-900">
-          <div className="text-gray-400">Loading editor...</div>
-        </div>
-      }
     />
   )
 }
 
-export { CodeEditor, LANGUAGE_CONFIGS }
+export default CodeEditor

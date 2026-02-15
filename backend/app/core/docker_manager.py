@@ -12,6 +12,9 @@ from app.config import settings
 from app.utils.constants import DOCKER_IMAGES
 from app.utils.helpers import generate_container_name
 
+# Languages that need network access
+NETWORK_ENABLED_LANGUAGES = {"ubuntu"}
+
 
 class DockerManager:
     """Manages Docker containers for code execution."""
@@ -63,6 +66,9 @@ class DockerManager:
         image_name = DOCKER_IMAGES[language]
         container_name = generate_container_name(execution_id, language)
         
+        # Ubuntu containers need network for apt-get, curl, etc.
+        disable_network = language not in NETWORK_ENABLED_LANGUAGES
+        
         try:
             container = self.client.containers.create(
                 image=image_name,
@@ -74,10 +80,10 @@ class DockerManager:
                 mem_limit=settings.MAX_MEMORY,
                 cpu_quota=settings.MAX_CPU_QUOTA,
                 cpu_period=settings.MAX_CPU_PERIOD,
-                network_disabled=True,
+                network_disabled=disable_network,
             )
             
-            print(f"✅ Container created: {container_name}")
+            print(f"✅ Container created: {container_name}" + (" (network: ON)" if not disable_network else ""))
             return container
             
         except APIError as e:
