@@ -27,7 +27,7 @@ function AIAssistant({ code, error, language, onClose }) {
         payload.code = code
       }
 
-      const res = await fetch('http://localhost:8000/api/ai/assist', {
+      const res = await fetch('/api/ai/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
