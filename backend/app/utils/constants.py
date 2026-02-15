@@ -10,7 +10,11 @@ DOCKER_IMAGES = {
     "java": "eclipse-temurin:21-jdk",
     "cpp": "gcc:12",
     "ubuntu": "ubuntu:22.04",
+    # HTML doesn't use Docker - handled separately in executor
 }
+
+# Languages that don't need Docker execution
+NO_DOCKER_LANGUAGES = {"html"}
 
 # File extensions for each language
 FILE_EXTENSIONS = {
@@ -63,9 +67,14 @@ int main() {
 <html>
 <head>
     <title>Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        h1 { color: #333; }
+    </style>
 </head>
 <body>
     <h1>Hello, World!</h1>
+    <p>Edit this HTML and click Run to preview.</p>
 </body>
 </html>
 """,
@@ -117,6 +126,7 @@ WS_MESSAGE_TYPES = {
     "ERROR": "error",
     "COMPLETE": "complete",
     "DEPENDENCY": "dependency",
+    "HTML_PREVIEW": "html_preview",
 }
 
 # Execution statuses

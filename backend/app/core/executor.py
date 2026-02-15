@@ -11,7 +11,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core.docker_manager import get_docker_manager
 from app.services.dependency_detector import dependency_detector
-from app.utils.constants import EXECUTION_COMMANDS, FILE_EXTENSIONS, CODE_TEMPLATES, DOCKER_IMAGES
+from app.utils.constants import (
+    EXECUTION_COMMANDS, FILE_EXTENSIONS, CODE_TEMPLATES, 
+    DOCKER_IMAGES, NO_DOCKER_LANGUAGES,
+)
 from app.utils.helpers import (
     generate_execution_id,
     extract_java_classname,
@@ -41,9 +44,14 @@ class CodeExecutor:
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute code and stream output in real-time.
-        
         Yields output messages as they become available.
         """
+        # Handle HTML preview (no Docker needed)
+        if language in NO_DOCKER_LANGUAGES:
+            async for msg in self._handle_html_preview(language, code):
+                yield msg
+            return
+        
         execution_id = generate_execution_id()
         print(f"🚀 Starting execution {execution_id} for {language}")
         
@@ -244,11 +252,33 @@ class CodeExecutor:
             
             print(f"✅ Execution completed for {language} ({execution_id})")
     
+    async def _handle_html_preview(self, language: str, code: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Handle HTML preview without Docker."""
+        print(f"🌐 HTML preview requested")
+        
+        yield {
+            "type": "status",
+            "content": "Rendering HTML preview...",
+            "timestamp": get_timestamp(),
+        }
+        
+        # Send HTML content as a special preview message
+        yield {
+            "type": "html_preview",
+            "content": code,
+            "timestamp": get_timestamp(),
+        }
+        
+        yield {
+            "type": "complete",
+            "content": "HTML rendered successfully",
+            "timestamp": get_timestamp(),
+        }
+    
     async def _stream_logs_async(self, container) -> AsyncGenerator[str, None]:
         """Stream container logs asynchronously with timeout."""
         loop = asyncio.get_event_loop()
         queue = asyncio.Queue()
-        done_event = asyncio.Event()
         
         def _read_logs():
             """Read logs in a thread and put them in the queue."""
@@ -256,13 +286,12 @@ class CodeExecutor:
                 for line in container.logs(stream=True, follow=True):
                     decoded = line.decode('utf-8', errors='replace')
                     loop.call_soon_threadsafe(queue.put_nowait, decoded)
-            except Exception as e:
-                loop.call_soon_threadsafe(queue.put_nowait, None)
-                return
+            except Exception:
+                pass
             loop.call_soon_threadsafe(queue.put_nowait, None)
         
         # Start log reader in thread
-        log_future = loop.run_in_executor(_thread_pool, _read_logs)
+        loop.run_in_executor(_thread_pool, _read_logs)
         
         # Read from queue with timeout
         timeout = settings.MAX_EXECUTION_TIME
@@ -273,7 +302,6 @@ class CodeExecutor:
             remaining = timeout - elapsed
             
             if remaining <= 0:
-                # Cancel the log reader
                 try:
                     container.stop(timeout=1)
                 except Exception:

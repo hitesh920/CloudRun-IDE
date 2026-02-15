@@ -9,8 +9,8 @@ requests
 # WebSocket support
 websockets
 
-# Google Gemini AI (latest)
-google-generativeai
+# Google Gemini AI (new SDK)
+google-genai
 
 # Environment variables
 python-dotenv

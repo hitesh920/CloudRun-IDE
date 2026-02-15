@@ -1,9 +1,9 @@
 """
 CloudRun IDE - AI Assistant
-Google Gemini integration for code assistance.
+Google Gemini integration for code assistance using the new google.genai SDK.
 """
 
-from typing import Optional, Dict
+from typing import Dict
 from app.config import settings
 
 
@@ -13,20 +13,18 @@ class AIAssistant:
     def __init__(self):
         """Initialize Gemini API."""
         self.enabled = False
-        self.model = None
+        self.client = None
+        self.model_name = "gemini-2.0-flash"
         
         if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here":
             print("⚠️  AI Assistant: DISABLED (no valid API key)")
             return
         
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            # Quick validation - don't actually call the API
+            from google import genai
+            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
             self.enabled = True
-            print("✅ AI Assistant (Gemini 1.5 Flash): initialized")
+            print(f"✅ AI Assistant (Gemini {self.model_name}): initialized")
         except Exception as e:
             print(f"❌ AI Assistant initialization failed: {e}")
             self.enabled = False
@@ -37,16 +35,18 @@ class AIAssistant:
     
     async def _generate(self, prompt: str) -> Dict:
         """Generate content from Gemini with error handling."""
-        if not self.enabled:
+        if not self.enabled or not self.client:
             return {"success": False, "error": "AI assistant not configured"}
         
         try:
             import asyncio
-            # Run synchronous API call in thread pool
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self.model.generate_content(prompt)
+                lambda: self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                )
             )
             
             return {
