@@ -1,69 +1,127 @@
 """
 CloudRun IDE - AI Assistant
-Google Gemini integration for code assistance using the new google.genai SDK.
+Multi-provider AI integration for code assistance.
+Supports: Groq (free), Google Gemini
 """
 
+import json
 from typing import Dict
 from app.config import settings
 
 
 class AIAssistant:
-    """AI-powered code assistance using Google Gemini."""
+    """AI-powered code assistance. Tries Groq first, then Gemini."""
     
     def __init__(self):
-        """Initialize Gemini API."""
+        """Initialize AI provider."""
         self.enabled = False
-        self.client = None
-        self.model_name = "gemini-2.0-flash"
+        self.provider = None
+        self.provider_name = None
         
-        if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here":
-            print("⚠️  AI Assistant: DISABLED (no valid API key)")
-            return
+        # Try Groq first (free, fast)
+        if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "your_groq_api_key_here":
+            try:
+                import requests
+                self.provider = "groq"
+                self.provider_name = "Groq (llama-3.3-70b)"
+                self.groq_key = settings.GROQ_API_KEY
+                self.groq_model = "llama-3.3-70b-versatile"
+                self.enabled = True
+                print(f"✅ AI Assistant ({self.provider_name}): initialized")
+                return
+            except Exception as e:
+                print(f"⚠️  Groq init failed: {e}")
         
-        try:
-            from google import genai
-            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-            self.enabled = True
-            print(f"✅ AI Assistant (Gemini {self.model_name}): initialized")
-        except Exception as e:
-            print(f"❌ AI Assistant initialization failed: {e}")
-            self.enabled = False
+        # Fallback to Gemini
+        if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here":
+            try:
+                from google import genai
+                self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                self.provider = "gemini"
+                self.provider_name = "Gemini (2.0-flash)"
+                self.gemini_model = "gemini-2.0-flash"
+                self.enabled = True
+                print(f"✅ AI Assistant ({self.provider_name}): initialized")
+                return
+            except Exception as e:
+                print(f"⚠️  Gemini init failed: {e}")
+        
+        print("⚠️  AI Assistant: DISABLED (no GROQ_API_KEY or GEMINI_API_KEY)")
     
     def is_enabled(self) -> bool:
         """Check if AI assistant is enabled."""
         return self.enabled
     
+    def get_provider_name(self) -> str:
+        """Get the active provider name."""
+        return self.provider_name or "None"
+    
     async def _generate(self, prompt: str) -> Dict:
-        """Generate content from Gemini with error handling."""
-        if not self.enabled or not self.client:
+        """Generate content from AI provider."""
+        if not self.enabled:
             return {"success": False, "error": "AI assistant not configured"}
         
         try:
             import asyncio
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                )
-            )
             
-            return {
-                "success": True,
-                "response": response.text,
-            }
+            if self.provider == "groq":
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self._call_groq(prompt)
+                )
+            elif self.provider == "gemini":
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: self._call_gemini(prompt)
+                )
+            else:
+                return {"success": False, "error": "No AI provider configured"}
+            
+            return {"success": True, "response": response}
+            
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ Gemini API error: {error_msg}")
-            return {
-                "success": False,
-                "error": f"AI request failed: {error_msg}",
-            }
+            print(f"❌ AI API error ({self.provider}): {error_msg}")
+            return {"success": False, "error": f"AI request failed: {error_msg}"}
+    
+    def _call_groq(self, prompt: str) -> str:
+        """Call Groq API (OpenAI-compatible)."""
+        import requests
+        
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.groq_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.groq_model,
+                "messages": [
+                    {"role": "system", "content": "You are a helpful programming assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": 2048,
+                "temperature": 0.3,
+            },
+            timeout=30,
+        )
+        
+        if response.status_code != 200:
+            error_data = response.json().get("error", {})
+            raise Exception(f"{response.status_code}: {error_data.get('message', response.text)}")
+        
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    
+    def _call_gemini(self, prompt: str) -> str:
+        """Call Gemini API using google-genai SDK."""
+        response = self.client.models.generate_content(
+            model=self.gemini_model,
+            contents=prompt,
+        )
+        return response.text
     
     async def fix_error(self, code: str, error: str, language: str) -> Dict:
         """Analyze error and suggest fix."""
-        prompt = f"""You are a helpful programming assistant. A {language} program has an error.
+        prompt = f"""A {language} program has an error.
 
 CODE:
 ```{language}
@@ -93,7 +151,7 @@ Format your response as:
     
     async def explain_error(self, error: str, language: str) -> Dict:
         """Explain what an error means."""
-        prompt = f"""You are a helpful programming assistant. Explain this {language} error in simple terms:
+        prompt = f"""Explain this {language} error in simple terms:
 
 ERROR:
 {error}
@@ -112,7 +170,7 @@ Keep it concise and beginner-friendly.
     
     async def explain_code(self, code: str, language: str) -> Dict:
         """Explain what code does."""
-        prompt = f"""You are a helpful programming assistant. Explain this {language} code:
+        prompt = f"""Explain this {language} code:
 
 CODE:
 ```{language}
@@ -133,7 +191,7 @@ Keep it clear and educational.
     
     async def optimize_code(self, code: str, language: str) -> Dict:
         """Suggest code optimizations."""
-        prompt = f"""You are a helpful programming assistant. Review and optimize this {language} code:
+        prompt = f"""Review and optimize this {language} code:
 
 CODE:
 ```{language}

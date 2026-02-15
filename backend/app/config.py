@@ -28,7 +28,8 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(',') if origin.strip()]
         return v
     
-    # Google Gemini API
+    # AI API Keys (Groq is preferred, Gemini as fallback)
+    GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     
     # Docker Container Limits
