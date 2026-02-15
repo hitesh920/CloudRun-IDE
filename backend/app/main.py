@@ -2,7 +2,16 @@
 CloudRun IDE - Main Application
 """
 
+import logging
 from fastapi import FastAPI
+
+
+# Filter out noisy health check logs
+class HealthCheckFilter(logging.Filter):
+    def filter(self, record):
+        return "/health" not in record.getMessage()
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
