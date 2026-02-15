@@ -1,6 +1,6 @@
 # CloudRun IDE
 
-A cloud-based code execution IDE with real-time output streaming, AI-powered code assistance, and Docker isolation. Built with FastAPI, React, and Monaco Editor.
+A cloud-based code execution IDE with real-time output streaming, AI-powered code assistance, user authentication, and Docker isolation. Built with FastAPI, React, and Monaco Editor.
 
 ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -11,26 +11,32 @@ A cloud-based code execution IDE with real-time output streaming, AI-powered cod
 
 **Real-time Streaming** — Output streams live over WebSocket as your program runs. See stdout, stderr, status updates, and execution results in real time.
 
+**Auto Package Install** — Missing a dependency? CloudRun detects `ModuleNotFoundError` / `Cannot find module` errors and offers a one-click "Install & Re-run" button. Packages install in a network-enabled container, then your code runs automatically.
+
+**ANSI Color Support** — Terminal output renders ANSI escape codes as actual colors. Libraries like Python's `colorama` and Node's `chalk` display colored output correctly.
+
 **AI Assistant** — Powered by Groq (llama-3.3-70b) with Gemini fallback. Fix errors with one click and the corrected code is auto-applied to the editor. Also supports explaining errors, explaining code, and optimization suggestions.
 
-**VS Code-style UI** — Dark theme interface with Monaco Editor, tab-based bottom panel (Terminal / AI Assistant / Input), activity bar, collapsible file explorer, resizable panels, and a blue status bar.
+**User Authentication** — Register/login system with JWT tokens. User data stored in SQLite (zero config) with optional PostgreSQL support. Guest mode available for quick access without an account.
+
+**VS Code-style UI** — Dark theme interface with Monaco Editor, tab-based bottom panel (Terminal / AI Assistant / Input), activity bar, collapsible file explorer, resizable panels, user badge with dropdown menu, and a blue status bar.
 
 **Ubuntu Shell** — Run system commands (`apt-get`, `curl`, `ls`, `uname`, etc.) in a network-enabled Ubuntu 22.04 container.
 
 **File Upload** — Drag-and-drop or browse to upload additional files for multi-file projects. Files are copied into the execution container.
 
-**Dependency Detection** — Automatically detects missing Python (pip) and Node.js (npm) packages from error output and suggests installation.
-
 ## Supported Languages
 
 | Language | Docker Image | File | Network |
 |----------|-------------|------|---------|
-| Python 3.11 | `python:3.11-slim` | `main.py` | Disabled |
-| Node.js 20 | `node:20-alpine` | `index.js` | Disabled |
+| Python 3.11 | `python:3.11-slim` | `main.py` | Disabled* |
+| Node.js 20 | `node:20-alpine` | `index.js` | Disabled* |
 | Java 21 | `eclipse-temurin:21-jdk` | `Main.java` | Disabled |
 | C++ (GCC 12) | `gcc:12` | `main.cpp` | Disabled |
 | HTML/CSS/JS | None (preview only) | `index.html` | N/A |
 | Ubuntu Shell | `ubuntu:22.04` | `script.sh` | **Enabled** |
+
+*\*Network is temporarily enabled during package installation for Python and Node.js.*
 
 ## Quick Start
 
@@ -45,9 +51,12 @@ A cloud-based code execution IDE with real-time output streaming, AI-powered cod
 git clone https://github.com/hitesh920/CloudRun.git
 cd CloudRun
 
+# Create data directory for SQLite database
+mkdir -p data
+
 # Configure environment
 cp backend/.env.example backend/.env
-# Edit backend/.env — add GROQ_API_KEY (and/or GEMINI_API_KEY)
+# Edit backend/.env — add GROQ_API_KEY and set JWT_SECRET
 
 # Start
 docker compose up -d
@@ -74,16 +83,17 @@ The first launch pulls Docker images for all languages (~2-3 minutes). Subsequen
 │  /ws/*  → backend:8000 (WebSocket)      │
 ├─────────────────────────────────────────┤
 │  FastAPI Backend (Port 8000)            │
-│  REST API + WebSocket + AI Assistant    │
+│  REST API + WebSocket + Auth + AI       │
+│  SQLite Database (data/cloudrun.db)     │
 ├─────────────────────────────────────────┤
 │  Docker Engine                          │
 │  Isolated containers per execution      │
 └─────────────────────────────────────────┘
 ```
 
-**Backend** — FastAPI with WebSocket streaming, Docker SDK for container management, multi-provider AI assistant (Groq + Gemini).
+**Backend** — FastAPI with WebSocket streaming, Docker SDK for container management, SQLAlchemy + SQLite for user data, JWT authentication, multi-provider AI assistant (Groq + Gemini).
 
-**Frontend** — React 18, Vite, Monaco Editor, Tailwind CSS. VS Code dark theme with resizable panels.
+**Frontend** — React 18, Vite, Monaco Editor, Tailwind CSS. VS Code dark theme with resizable panels, auth screens, and ANSI color terminal.
 
 **Execution** — Each code run creates a temporary Docker container with CPU/memory limits, streams logs in real time, then cleans up automatically.
 
@@ -118,14 +128,26 @@ GEMINI_API_KEY=AIza...       # Free at https://makersuite.google.com/app/apikey
 
 Groq is tried first. If unavailable, Gemini is used as fallback.
 
+## Authentication
+
+CloudRun includes a built-in user authentication system:
+
+- **Register** — Create an account with username, email, and password
+- **Login** — Sign in with username/email and password
+- **Guest mode** — Skip authentication and use the IDE without an account
+- **JWT tokens** — 7-day expiry, stored in localStorage
+- **Password security** — PBKDF2-SHA256 with 100,000 iterations
+
+User data is stored in SQLite by default (at `data/cloudrun.db`). No external database setup required.
+
 ## Project Structure
 
 ```
 CloudRun/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # REST routes + WebSocket endpoints
-│   │   ├── core/           # Docker manager + code executor
+│   │   ├── api/            # REST routes + WebSocket + Auth endpoints
+│   │   ├── core/           # Docker manager + code executor + database
 │   │   ├── services/       # AI assistant + dependency detector
 │   │   ├── utils/          # Constants, helpers
 │   │   ├── config.py       # Settings from .env
@@ -136,13 +158,14 @@ CloudRun/
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── components/     # Editor, Console, AIAssistant, etc.
+│   │   ├── components/     # Editor, Console, AIAssistant, AuthScreen, etc.
 │   │   ├── hooks/          # useWebSocket, useTheme, useKeyboardShortcuts
-│   │   ├── services/       # WebSocket + REST API clients
-│   │   └── App.jsx         # Main layout (VS Code theme)
+│   │   ├── services/       # WebSocket + REST API + Auth clients
+│   │   └── App.jsx         # Main layout (VS Code theme + auth flow)
 │   ├── nginx.conf          # Reverse proxy config
 │   ├── Dockerfile
 │   └── package.json
+├── data/                   # SQLite database (auto-created)
 ├── deployment/
 │   └── README.md           # Deployment guide
 ├── docker-compose.yml
@@ -157,10 +180,12 @@ See `backend/.env.example` for all options:
 |----------|---------|-------------|
 | `GROQ_API_KEY` | — | Groq API key (primary AI provider) |
 | `GEMINI_API_KEY` | — | Google Gemini API key (fallback) |
-| `MAX_EXECUTION_TIME` | `60` | Max seconds per execution |
-| `MAX_MEMORY` | `1g` | Memory limit per container |
-| `RATE_LIMIT_PER_MINUTE` | `10` | API rate limit |
-| `PRE_PULL_IMAGES` | `True` | Pull Docker images on startup |
+| `JWT_SECRET` | `cloudrun-ide-secret-...` | Secret key for JWT token signing (change in production!) |
+| `DATABASE_URL` | `sqlite:///data/cloudrun.db` | Database URL (SQLite default, supports PostgreSQL) |
+| `MAX_EXECUTION_TIME` | `30` | Max seconds per execution |
+| `MAX_MEMORY` | `256m` | Memory limit per container |
+| `MAX_REQUESTS_PER_MINUTE` | `30` | API rate limit |
+| `PRE_PULL_IMAGES` | `false` | Pull Docker images on startup |
 
 ## Deployment
 
@@ -172,8 +197,9 @@ Quick summary:
 # On your VPS
 git clone https://github.com/hitesh920/CloudRun.git
 cd CloudRun
+mkdir -p data
 cp backend/.env.example backend/.env
-nano backend/.env  # Add API keys
+nano backend/.env  # Add API keys, set JWT_SECRET
 docker compose up -d
 ```
 

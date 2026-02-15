@@ -1,6 +1,6 @@
 # CloudRun IDE — Backend
 
-FastAPI backend for CloudRun IDE. Handles code execution in Docker containers, real-time WebSocket streaming, and multi-provider AI assistance.
+FastAPI backend for CloudRun IDE. Handles code execution in Docker containers, real-time WebSocket streaming, user authentication, and multi-provider AI assistance.
 
 ## Quick Setup
 
@@ -9,7 +9,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env      # Add GROQ_API_KEY and/or GEMINI_API_KEY
+cp .env.example .env      # Add GROQ_API_KEY and/or GEMINI_API_KEY, set JWT_SECRET
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -28,6 +28,10 @@ Requires Docker running locally for code execution.
 | `POST` | `/api/execute/stop/{id}` | Stop running execution |
 | `POST` | `/api/ai/assist` | AI code assistance |
 | `GET` | `/api/ai/status` | AI provider status |
+| `POST` | `/api/auth/register` | Create new account |
+| `POST` | `/api/auth/login` | Login (username/email + password) |
+| `GET` | `/api/auth/me` | Get current user profile |
+| `POST` | `/api/auth/verify` | Verify JWT token |
 | `WS` | `/ws/execute` | WebSocket streaming execution |
 
 Interactive docs at `http://localhost:8000/docs`.
@@ -42,6 +46,18 @@ Interactive docs at `http://localhost:8000/docs`.
 | C++ (GCC 12) | `gcc:12` | `g++ + run` |
 | HTML | None | Preview returned as WebSocket message |
 | Ubuntu Shell | `ubuntu:22.04` | `bash -c <code>` (network enabled) |
+
+## Authentication
+
+JWT-based auth with SQLite storage (zero config):
+
+- **Register** — `POST /api/auth/register` with username, email, password
+- **Login** — `POST /api/auth/login` with username/email + password
+- **Verify** — `POST /api/auth/verify` with `Authorization: Bearer <token>` header
+- **Password hashing** — PBKDF2-SHA256 with 100,000 iterations
+- **Token expiry** — 7 days
+
+Database: SQLite at `data/cloudrun.db` (auto-created on startup). Supports PostgreSQL via `DATABASE_URL` env var.
 
 ## AI Assistant
 
@@ -61,27 +77,32 @@ All settings via environment variables (`.env` file):
 GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=AIza...
 
+# Auth & Database
+JWT_SECRET=change-me-to-random-string
+DATABASE_URL=              # Default: SQLite. Set for PostgreSQL.
+
 # Server
 HOST=0.0.0.0
 PORT=8000
-DEBUG=True
+DEBUG=false
 
 # Execution limits
-MAX_EXECUTION_TIME=60
-MAX_MEMORY=1g
-MAX_CPU_QUOTA=100000
+MAX_EXECUTION_TIME=30
+MAX_MEMORY=256m
+MAX_CPU_QUOTA=50000
 MAX_CPU_PERIOD=100000
 
 # Misc
 CORS_ORIGINS=*
-RATE_LIMIT_PER_MINUTE=10
-PRE_PULL_IMAGES=True
+MAX_REQUESTS_PER_MINUTE=30
+PRE_PULL_IMAGES=false
 ```
 
 ## Key Dependencies
 
 - `fastapi` + `uvicorn` — Web framework and ASGI server
 - `docker` — Docker SDK for container management
+- `sqlalchemy` — Database ORM (SQLite / PostgreSQL)
 - `google-genai` — Gemini AI integration
 - `requests` — Groq API calls
 - `websockets` — Real-time streaming
@@ -96,11 +117,13 @@ app/
 ├── config.py            # Settings from .env
 ├── models.py            # Pydantic models (LanguageEnum, etc.)
 ├── api/
+│   ├── auth.py          # Auth endpoints (register/login/verify)
 │   ├── routes.py        # REST API endpoints
 │   └── websocket.py     # WebSocket execution endpoint
 ├── core/
+│   ├── database.py      # SQLAlchemy models + SQLite/PostgreSQL
 │   ├── docker_manager.py # Container lifecycle management
-│   ├── executor.py       # Code execution + streaming
+│   ├── executor.py       # Code execution + package install + streaming
 │   └── websocket_manager.py # Connection tracking
 ├── services/
 │   ├── ai_assistant.py   # Multi-provider AI (Groq + Gemini)

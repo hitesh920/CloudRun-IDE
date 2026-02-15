@@ -60,3 +60,7 @@ tmp/
 
 # Temp deployment folder
 temp/
+
+# Database
+data/*.db
+data/*.sqlite

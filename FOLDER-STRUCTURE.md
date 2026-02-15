@@ -12,10 +12,12 @@ CloudRun/
 │   │   ├── models.py               # Pydantic models, LanguageEnum
 │   │   ├── api/
 │   │   │   ├── __init__.py
+│   │   │   ├── auth.py             # Auth endpoints (register/login/verify)
 │   │   │   ├── routes.py           # REST endpoints (/api/*)
 │   │   │   └── websocket.py        # WebSocket endpoint (/ws/execute)
 │   │   ├── core/
 │   │   │   ├── __init__.py
+│   │   │   ├── database.py         # SQLAlchemy models + SQLite setup
 │   │   │   ├── docker_manager.py   # Container create/start/stop/cleanup
 │   │   │   ├── executor.py         # Code execution + log streaming
 │   │   │   └── websocket_manager.py# Connection tracking
@@ -38,12 +40,13 @@ CloudRun/
 │   │   └── vite.svg
 │   ├── src/
 │   │   ├── main.jsx                # React entry point
-│   │   ├── App.jsx                 # Main layout (VS Code theme)
+│   │   ├── App.jsx                 # Main layout + auth flow + VS Code theme
 │   │   ├── index.css               # Tailwind + custom styles
 │   │   ├── components/
 │   │   │   ├── Editor.jsx          # Monaco editor + language configs
-│   │   │   ├── Console.jsx         # Terminal output
+│   │   │   ├── Console.jsx         # Terminal output + ANSI color parsing
 │   │   │   ├── AIAssistant.jsx     # AI actions + auto-fix
+│   │   │   ├── AuthScreen.jsx      # Login / register / guest mode
 │   │   │   ├── FileExplorer.jsx    # File upload / drag-drop
 │   │   │   ├── InputPanel.jsx      # stdin input
 │   │   │   ├── DependencyPrompt.jsx# Missing package notification
@@ -55,7 +58,8 @@ CloudRun/
 │   │   │   └── useKeyboardShortcuts.js # Ctrl+Enter, etc.
 │   │   └── services/
 │   │       ├── websocket.js        # WebSocket client singleton
-│   │       └── api.js              # REST API client
+│   │       ├── api.js              # REST API client
+│   │       └── auth.js             # Auth service (login/register/token)
 │   ├── index.html
 │   ├── nginx.conf                  # Production reverse proxy
 │   ├── Dockerfile
@@ -67,6 +71,8 @@ CloudRun/
 │   ├── .dockerignore
 │   ├── .gitignore
 │   └── README.md
+├── data/                           # SQLite database (auto-created)
+│   └── cloudrun.db
 ├── deployment/
 │   └── README.md                   # Deployment guide
 ├── docker-compose.yml
@@ -80,5 +86,5 @@ CloudRun/
 ## Create from Scratch
 
 ```bash
-mkdir -p CloudRun/{backend/app/{api,core,services,utils},frontend/{public,src/{components,hooks,services}},deployment}
+mkdir -p CloudRun/{backend/app/{api,core,services,utils},frontend/{public,src/{components,hooks,services}},deployment,data}
 ```

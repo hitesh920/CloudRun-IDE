@@ -1,6 +1,6 @@
 # CloudRun IDE — Frontend
 
-React + Vite frontend with VS Code-style dark theme, Monaco Editor, and real-time WebSocket execution.
+React + Vite frontend with VS Code-style dark theme, Monaco Editor, user authentication, ANSI color terminal, and real-time WebSocket execution.
 
 ## Quick Setup
 
@@ -17,6 +17,9 @@ Opens at `http://localhost:5173`. API calls proxy to `http://localhost:8000`.
 
 - **Monaco Editor** — VS Code editing experience with syntax highlighting, auto-completion, bracket matching, and language-specific settings.
 - **VS Code Dark Theme** — `#1e1e1e` editor, `#252526` panels, `#007acc` status bar. No gradients or fancy colors.
+- **User Authentication** — Login/register screens with guest mode. User badge with dropdown menu in title bar.
+- **ANSI Color Terminal** — Console renders ANSI escape codes (colors 30-37, 90-97, bold, reset). Libraries like `colorama` and `chalk` display actual colors.
+- **Auto Package Install** — Detects missing packages and shows "Install & Re-run" button in the terminal.
 - **Resizable Bottom Panel** — Drag the divider between editor and bottom panel to resize.
 - **Tab-based Bottom Panel** — Terminal, AI Assistant, and Input tabs.
 - **AI Auto-fix** — "Fix Error" extracts corrected code from AI response and applies it directly to the editor.
@@ -46,13 +49,14 @@ npm run lint     # ESLint
 
 ```
 src/
-├── App.jsx                 # Main layout — welcome screen + editor view
+├── App.jsx                 # Main layout — auth flow + welcome + editor
 ├── main.jsx                # React entry point
 ├── index.css               # Tailwind base + custom scrollbar
 ├── components/
 │   ├── Editor.jsx          # Monaco editor + LANGUAGE_CONFIGS
-│   ├── Console.jsx         # Terminal output (color-coded)
+│   ├── Console.jsx         # Terminal output + ANSI color parsing
 │   ├── AIAssistant.jsx     # AI actions + auto-fix + code extraction
+│   ├── AuthScreen.jsx      # Login / register / guest mode
 │   ├── FileExplorer.jsx    # File upload + drag-and-drop
 │   ├── InputPanel.jsx      # stdin input
 │   ├── DependencyPrompt.jsx # Missing package notification
@@ -64,7 +68,8 @@ src/
 │   └── useKeyboardShortcuts.js # Ctrl+Enter, Ctrl+K, etc.
 └── services/
     ├── websocket.js        # WebSocket client (singleton)
-    └── api.js              # REST API client
+    ├── api.js              # REST API client
+    └── auth.js             # Auth service (login/register/token mgmt)
 ```
 
 ## Configuration

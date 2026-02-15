@@ -11,18 +11,22 @@
 ### Deploy
 
 ```bash
-# 1. Configure
+# 1. Create data directory
+mkdir -p data
+
+# 2. Configure
 cp backend/.env.example backend/.env
 nano backend/.env
 # Add: GROQ_API_KEY=gsk_...
+# Set: JWT_SECRET=some-random-secret-string
 
-# 2. Start
+# 3. Start
 docker compose up -d
 
-# 3. Verify
+# 4. Verify
 docker compose logs -f
 
-# 4. Access
+# 5. Access
 # http://localhost (or http://<server-ip>)
 ```
 
@@ -58,8 +62,9 @@ sudo chmod +x /usr/local/bin/docker-compose
 ```bash
 git clone https://github.com/hitesh920/CloudRun.git
 cd CloudRun
+mkdir -p data
 cp backend/.env.example backend/.env
-nano backend/.env  # Add GROQ_API_KEY and/or GEMINI_API_KEY
+nano backend/.env  # Add GROQ_API_KEY, set JWT_SECRET
 ```
 
 ### 3. Start
@@ -109,12 +114,14 @@ docker compose logs -f
 |----------|---------|-------------|
 | `GROQ_API_KEY` | — | Groq API key (free, primary AI provider) |
 | `GEMINI_API_KEY` | — | Gemini API key (fallback AI provider) |
-| `DEBUG` | `True` | Debug mode |
-| `MAX_EXECUTION_TIME` | `60` | Timeout per execution (seconds) |
-| `MAX_MEMORY` | `1g` | Memory limit per container |
-| `MAX_CPU_QUOTA` | `100000` | CPU quota per container |
-| `RATE_LIMIT_PER_MINUTE` | `10` | API rate limit |
-| `PRE_PULL_IMAGES` | `True` | Pull all Docker images on startup |
+| `JWT_SECRET` | `cloudrun-ide-secret-...` | Secret for JWT token signing (**change in production!**) |
+| `DATABASE_URL` | SQLite (`data/cloudrun.db`) | Database URL. Supports PostgreSQL. |
+| `DEBUG` | `false` | Debug mode |
+| `MAX_EXECUTION_TIME` | `30` | Timeout per execution (seconds) |
+| `MAX_MEMORY` | `256m` | Memory limit per container |
+| `MAX_CPU_QUOTA` | `50000` | CPU quota per container |
+| `MAX_REQUESTS_PER_MINUTE` | `30` | API rate limit |
+| `PRE_PULL_IMAGES` | `false` | Pull all Docker images on startup |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
 
 ## Troubleshooting
@@ -130,6 +137,10 @@ docker compose logs -f
 **AI assistant not working**
 - Verify API key: `curl http://localhost:8000/api/ai/status`
 - Check backend logs for API errors: `docker compose logs backend | grep AI`
+
+**Auth not working**
+- Check database initialized: `docker compose logs backend | grep Database`
+- Verify data directory is mounted: `docker compose exec backend ls /app/data/`
 
 **Ubuntu containers can't access network**
 - Ubuntu containers have `network_disabled=False` by default
