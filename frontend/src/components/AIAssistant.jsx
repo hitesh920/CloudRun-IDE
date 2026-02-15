@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import { Sparkles, Loader } from 'lucide-react'
 
 function AIAssistant({ code, error, language }) {
   const [response, setResponse] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(true)
   const [lastAction, setLastAction] = useState(null)
 
   const handleAIAction = async (actionType) => {
@@ -13,10 +11,7 @@ function AIAssistant({ code, error, language }) {
     setResponse(null)
 
     try {
-      const payload = {
-        action: actionType,
-        language,
-      }
+      const payload = { action: actionType, language }
 
       if (actionType === 'fix_error') {
         payload.code = code
@@ -27,7 +22,6 @@ function AIAssistant({ code, error, language }) {
         payload.code = code
       }
 
-      // Use relative URL - goes through Nginx proxy
       const res = await fetch('/api/ai/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,7 +34,6 @@ function AIAssistant({ code, error, language }) {
       }
 
       const data = await res.json()
-
       if (data.success) {
         setResponse(data.response)
       } else {
@@ -53,86 +46,77 @@ function AIAssistant({ code, error, language }) {
     }
   }
 
+  const hasError = !!error
+  const hasCode = !!code
+
+  const actions = [
+    { id: 'fix_error', label: 'Fix Error', disabled: !hasError, icon: '🔧' },
+    { id: 'explain_error', label: 'Explain Error', disabled: !hasError, icon: '❓' },
+    { id: 'explain_code', label: 'Explain Code', disabled: !hasCode, icon: '📖' },
+    { id: 'optimize_code', label: 'Optimize', disabled: !hasCode, icon: '⚡' },
+  ]
+
   return (
-    <div className="rounded-lg border border-purple-500/30 overflow-hidden bg-gray-800">
-      {/* Header */}
-      <div 
-        className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-b border-gray-700 cursor-pointer"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-purple-400" />
-          <span className="text-sm font-semibold text-gray-200">AI Assistant</span>
-        </div>
-        
-        <span className="text-gray-500 text-sm">
-          {isExpanded ? '▼' : '▶'}
-        </span>
+    <div className="h-full flex flex-col bg-[#1e1e1e] overflow-hidden">
+      {/* Action Buttons Row */}
+      <div className="flex items-center gap-1 px-3 py-2 bg-[#252526] border-b border-[#1e1e1e] flex-shrink-0">
+        {actions.map(action => (
+          <button
+            key={action.id}
+            onClick={() => handleAIAction(action.id)}
+            disabled={loading || action.disabled}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded transition-colors ${
+              loading || action.disabled
+                ? 'text-[#585858] cursor-not-allowed'
+                : 'text-[#cccccc] hover:bg-[#3a3a3a] hover:text-white'
+            }`}
+            title={action.disabled ? (action.id.includes('error') ? 'Run code with an error first' : 'Write some code first') : action.label}
+          >
+            <span className="text-[10px]">{action.icon}</span>
+            {action.label}
+          </button>
+        ))}
+
+        {/* Loading indicator */}
+        {loading && (
+          <span className="text-xs text-[#858585] ml-auto flex items-center gap-1.5">
+            <svg className="animate-spin w-3 h-3" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="20 10"/>
+            </svg>
+            Processing...
+          </span>
+        )}
+
+        {/* Clear button */}
+        {response && !loading && (
+          <button
+            onClick={() => setResponse(null)}
+            className="text-xs text-[#858585] hover:text-white ml-auto transition-colors"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      {/* Content */}
-      {isExpanded && (
-        <div className="p-4">
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <button
-              onClick={() => handleAIAction('fix_error')}
-              disabled={loading || !error}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm transition-colors text-white"
-            >
-              Fix Error
-            </button>
-            
-            <button
-              onClick={() => handleAIAction('explain_error')}
-              disabled={loading || !error}
-              className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm transition-colors text-white"
-            >
-              Explain Error
-            </button>
-            
-            <button
-              onClick={() => handleAIAction('explain_code')}
-              disabled={loading || !code}
-              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm transition-colors text-white"
-            >
-              Explain Code
-            </button>
-            
-            <button
-              onClick={() => handleAIAction('optimize_code')}
-              disabled={loading || !code}
-              className="px-3 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm transition-colors text-white"
-            >
-              Optimize Code
-            </button>
+      {/* Response Area */}
+      <div className="flex-1 overflow-y-auto">
+        {response ? (
+          <div className="p-3">
+            <pre className="whitespace-pre-wrap text-[13px] text-[#d4d4d4] font-[Consolas,'Courier_New',monospace] leading-relaxed">
+              {response}
+            </pre>
           </div>
-
-          {/* Loading State */}
-          {loading && (
-            <div className="flex items-center gap-2 text-gray-400 text-sm mb-3">
-              <Loader className="w-4 h-4 animate-spin" />
-              <span>Asking AI ({lastAction})...</span>
-            </div>
-          )}
-
-          {/* AI Response */}
-          {response && !loading && (
-            <div className="bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto">
-              <pre className="whitespace-pre-wrap text-gray-300 text-sm font-sans leading-relaxed">
-                {response}
-              </pre>
-            </div>
-          )}
-
-          {/* Help Text */}
-          {!loading && !response && (
-            <div className="text-xs text-gray-500 text-center">
-              {error ? 'Click a button to get AI assistance' : 'Run code first to get AI help with errors'}
-            </div>
-          )}
-        </div>
-      )}
+        ) : !loading ? (
+          <div className="flex items-center justify-center h-full text-xs text-[#585858]">
+            {hasError 
+              ? 'Click "Fix Error" or "Explain Error" to get AI help'
+              : hasCode 
+                ? 'Click "Explain Code" or "Optimize" to get AI analysis'
+                : 'Write and run code to use AI assistance'
+            }
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }

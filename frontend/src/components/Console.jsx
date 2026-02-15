@@ -1,130 +1,93 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
-function Console({ output = [], isRunning = false, onClear }) {
-  const consoleEndRef = useRef(null)
-  const [htmlPreview, setHtmlPreview] = useState(null)
+function Console({ output, isRunning, onClear }) {
+  const scrollRef = useRef(null)
 
-  // Auto-scroll to bottom when new output arrives
   useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [output])
-
-  // Detect HTML preview messages
-  useEffect(() => {
-    const previewMsg = output.find(msg => msg.type === 'html_preview')
-    if (previewMsg) {
-      setHtmlPreview(previewMsg.content)
-    }
-  }, [output])
-
-  // Clear preview when output is cleared
-  useEffect(() => {
-    if (output.length === 0) {
-      setHtmlPreview(null)
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [output])
 
   const getMessageStyle = (type) => {
     switch (type) {
-      case 'stdout':
-        return 'text-gray-200'
-      case 'stderr':
-        return 'text-red-400'
-      case 'error':
-        return 'text-red-500 font-semibold'
-      case 'status':
-        return 'text-blue-400 italic'
+      case 'status': return 'text-[#569cd6]'
+      case 'stdout': return 'text-[#d4d4d4]'
+      case 'stderr': return 'text-[#f44747]'
+      case 'error': return 'text-[#f44747]'
       case 'complete':
-        return 'text-green-400'
-      case 'dependency':
-        return 'text-yellow-400'
-      case 'html_preview':
-        return 'hidden'  // Hide the raw HTML message
-      default:
-        return 'text-gray-300'
+        return 'text-[#608b4e]'
+      case 'html_preview': return ''
+      default: return 'text-[#d4d4d4]'
     }
   }
 
   const getPrefix = (type) => {
     switch (type) {
-      case 'status':
-        return '⚡ '
-      case 'error':
-        return '❌ '
-      case 'complete':
-        return '✅ '
-      case 'dependency':
-        return '📦 '
-      default:
-        return ''
+      case 'status': return '› '
+      case 'stderr': return ''
+      case 'error': return ''
+      case 'complete': return '› '
+      default: return ''
     }
   }
 
-  const handleClear = () => {
-    setHtmlPreview(null)
-    onClear()
-  }
-
   return (
-    <div className="h-full flex flex-col bg-gray-800 rounded-lg border border-gray-700">
-      {/* Console Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-300">
-            {htmlPreview ? 'Preview' : 'Console'}
-          </h3>
-          {isRunning && (
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs text-gray-400">Running...</span>
-            </div>
-          )}
-        </div>
-        
+    <div className="h-full flex flex-col bg-[#1e1e1e] overflow-hidden">
+      {/* Console toolbar */}
+      <div className="flex items-center justify-end px-3 py-1 flex-shrink-0 bg-[#252526] border-b border-[#1e1e1e]">
         <button
-          onClick={handleClear}
-          className="text-xs text-gray-400 hover:text-white transition-colors"
-          title="Clear console (Ctrl+K)"
+          onClick={onClear}
+          className="text-[11px] text-[#858585] hover:text-white transition-colors"
+          title="Clear console"
         >
           Clear
         </button>
       </div>
 
-      {/* HTML Preview */}
-      {htmlPreview ? (
-        <div className="flex-1 bg-white rounded-b-lg overflow-hidden">
-          <iframe
-            srcDoc={htmlPreview}
-            title="HTML Preview"
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-modals"
-          />
-        </div>
-      ) : (
-        /* Console Output */
-        <div className="flex-1 overflow-y-auto p-4 font-mono text-sm">
-          {output.length === 0 ? (
-            <div className="text-gray-500 text-sm">
-              Output will appear here...
-              <br />
-              <span className="text-xs text-gray-600 mt-2 block">
-                Press Ctrl+Enter to run code
-              </span>
+      {/* Output area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 font-[Consolas,'Courier_New',monospace] text-[13px] leading-5">
+        {output.length === 0 && !isRunning && (
+          <div className="text-[#585858] text-xs">
+            Terminal ready. Click Run to execute code.
+          </div>
+        )}
+
+        {output.map((msg, i) => {
+          // HTML preview
+          if (msg.type === 'html_preview') {
+            return (
+              <div key={i} className="my-2">
+                <iframe
+                  srcDoc={msg.content}
+                  className="w-full bg-white rounded"
+                  style={{ height: '300px', border: '1px solid #414141' }}
+                  title="HTML Preview"
+                  sandbox="allow-scripts allow-modals"
+                />
+              </div>
+            )
+          }
+
+          const isError = msg.type === 'complete' && msg.content?.includes('failed')
+
+          return (
+            <div 
+              key={i} 
+              className={`${isError ? 'text-[#f44747]' : getMessageStyle(msg.type)} whitespace-pre-wrap break-all`}
+            >
+              {getPrefix(msg.type)}{msg.content}
             </div>
-          ) : (
-            <>
-              {output.map((msg, index) => (
-                <div key={index} className={`mb-1 ${getMessageStyle(msg.type)}`}>
-                  <span className="whitespace-pre-wrap break-words">
-                    {getPrefix(msg.type)}{msg.content}
-                  </span>
-                </div>
-              ))}
-              <div ref={consoleEndRef} />
-            </>
-          )}
-        </div>
-      )}
+          )
+        })}
+
+        {isRunning && (
+          <div className="text-[#569cd6] flex items-center gap-2">
+            <span className="animate-pulse">●</span>
+            <span>Running...</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
