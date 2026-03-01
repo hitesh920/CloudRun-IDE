@@ -4,7 +4,6 @@ Multi-provider AI integration for code assistance.
 Supports: Groq (free), Google Gemini
 """
 
-import json
 from typing import Dict
 from app.config import settings
 
@@ -19,24 +18,26 @@ class AIAssistant:
         self.provider_name = None
         
         # Try Groq first (free, fast)
-        if settings.GROQ_API_KEY and settings.GROQ_API_KEY != "your_groq_api_key_here":
+        groq_api_key = (settings.GROQ_API_KEY or "").strip()
+        if groq_api_key and groq_api_key != "your_groq_api_key_here":
             try:
                 import requests
                 self.provider = "groq"
                 self.provider_name = "Groq (llama-3.3-70b)"
-                self.groq_key = settings.GROQ_API_KEY
+                self.groq_key = groq_api_key
                 self.groq_model = "llama-3.3-70b-versatile"
                 self.enabled = True
                 print(f"✅ AI Assistant ({self.provider_name}): initialized")
                 return
             except Exception as e:
                 print(f"⚠️  Groq init failed: {e}")
-        
+
         # Fallback to Gemini
-        if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here":
+        gemini_api_key = (settings.GEMINI_API_KEY or "").strip()
+        if gemini_api_key and gemini_api_key != "your_gemini_api_key_here":
             try:
                 from google import genai
-                self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                self.client = genai.Client(api_key=gemini_api_key)
                 self.provider = "gemini"
                 self.provider_name = "Gemini (2.0-flash)"
                 self.gemini_model = "gemini-2.0-flash"
@@ -60,16 +61,20 @@ class AIAssistant:
         """Generate content from AI provider."""
         if not self.enabled:
             return {"success": False, "error": "AI assistant not configured"}
-        
+
+        if not prompt or not prompt.strip():
+            return {"success": False, "error": "Prompt cannot be empty"}
+
         try:
             import asyncio
+            loop = asyncio.get_running_loop()
             
             if self.provider == "groq":
-                response = await asyncio.get_event_loop().run_in_executor(
+                response = await loop.run_in_executor(
                     None, lambda: self._call_groq(prompt)
                 )
             elif self.provider == "gemini":
-                response = await asyncio.get_event_loop().run_in_executor(
+                response = await loop.run_in_executor(
                     None, lambda: self._call_gemini(prompt)
                 )
             else:
@@ -85,28 +90,38 @@ class AIAssistant:
     def _call_groq(self, prompt: str) -> str:
         """Call Groq API (OpenAI-compatible)."""
         import requests
-        
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.groq_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.groq_model,
-                "messages": [
-                    {"role": "system", "content": "You are a helpful programming assistant."},
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": 2048,
-                "temperature": 0.3,
-            },
-            timeout=30,
-        )
+        from requests import RequestException
+
+        try:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.groq_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.groq_model,
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful programming assistant."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "max_tokens": 2048,
+                    "temperature": 0.3,
+                },
+                timeout=30,
+            )
+        except RequestException as exc:
+            raise Exception(f"Network error while calling Groq: {exc}") from exc
         
         if response.status_code != 200:
-            error_data = response.json().get("error", {})
-            raise Exception(f"{response.status_code}: {error_data.get('message', response.text)}")
+            error_msg = response.text
+            try:
+                error_data = response.json().get("error", {})
+                error_msg = error_data.get("message", error_msg)
+            except ValueError:
+                # Keep raw response text when body is not JSON.
+                pass
+            raise Exception(f"{response.status_code}: {error_msg}")
         
         data = response.json()
         return data["choices"][0]["message"]["content"]
